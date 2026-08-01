@@ -115,29 +115,34 @@ Uses the existing viewport buffer when one already exists, so its mode
 
 ;;;; SVG icon files
 
-(defvar agent-shell-hq-peek--icon-dir
-  (expand-file-name "icons"
-                    (file-name-directory (or load-file-name
-                                             (buffer-file-name)
-                                             default-directory)))
-  "Directory containing the SVG icon files.")
-
 (defvar agent-shell-hq-peek--icon-cache nil
-  "Alist of (STATE . IMAGE) loaded from `agent-shell-hq-peek--icon-dir'.")
+  "Alist of (STATE . IMAGE) for buffer status icons.")
 
-(defun agent-shell-hq-peek--load-icons ()
-  "Load SVG icon files from disk into `agent-shell-hq-peek--icon-cache'."
-  (setq agent-shell-hq-peek--icon-cache
-        (mapcar (lambda (state)
-                  (let ((path (expand-file-name (format "%s.svg" state)
-                                                agent-shell-hq-peek--icon-dir)))
-                    (cons state (create-image path 'svg nil :ascent 'center))))
-                '(idle busy dead))))
+(defconst agent-shell-hq-peek--icon-svgs
+  '((idle . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
+  <circle cx=\"10\" cy=\"10\" r=\"8.5\" fill=\"#4E9A72\"/>
+  <polyline points=\"4.5,10.5 8.5,14.5 16,5.5\"
+            stroke=\"white\" stroke-width=\"2.5\" fill=\"none\"
+            stroke-linecap=\"round\" stroke-linejoin=\"round\"/>
+</svg>")
+    (busy . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
+  <polygon points=\"10,2 18.5,17.5 1.5,17.5\" fill=\"#C9922A\"/>
+</svg>")
+    (dead . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
+  <circle cx=\"10\" cy=\"10\" r=\"8.5\" fill=\"#C0392B\"/>
+  <line x1=\"6.5\" y1=\"6.5\" x2=\"13.5\" y2=\"13.5\" stroke=\"white\" stroke-width=\"2.5\" stroke-linecap=\"round\"/>
+  <line x1=\"13.5\" y1=\"6.5\" x2=\"6.5\" y2=\"13.5\" stroke=\"white\" stroke-width=\"2.5\" stroke-linecap=\"round\"/>
+</svg>"))
+  "Inline SVG strings for each buffer state.")
 
 (defun agent-shell-hq-peek--svg-icon (state)
   "Return the cached SVG image for STATE (`busy', `idle', or `dead')."
   (unless agent-shell-hq-peek--icon-cache
-    (agent-shell-hq-peek--load-icons))
+    (setq agent-shell-hq-peek--icon-cache
+          (mapcar (lambda (pair)
+                    (cons (car pair)
+                          (create-image (cdr pair) 'svg t :ascent 'center)))
+                  agent-shell-hq-peek--icon-svgs)))
   (alist-get state agent-shell-hq-peek--icon-cache))
 
 (defun agent-shell-hq-peek--buffer-state (buf)
