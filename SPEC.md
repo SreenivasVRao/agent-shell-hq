@@ -1,8 +1,8 @@
-# agent-shell-commander — Package Specification
+# agent-shell-hq — Package Specification
 
 ## Overview
 
-`agent-shell-commander` is an Emacs package that provides two complementary UX experiences for navigating and managing `agent-shell` buffers across projects. It builds on top of the existing `agent-shell` package and its `agent-shell-buffers` / `agent-shell-project-buffers` APIs.
+`agent-shell-hq` is an Emacs package that provides two complementary UX experiences for navigating and managing `agent-shell` buffers across projects. It builds on top of the existing `agent-shell` package and its `agent-shell-buffers` / `agent-shell-project-buffers` APIs.
 
 Both experiences share:
 - Project-grouped buffer listings (via `projectile` or `project.el`)
@@ -11,22 +11,22 @@ Both experiences share:
 
 **Resolved decisions:**
 - Peek preview: posframe is list-only; the invoking buffer stays visible behind it naturally
-- Perspective: hard dependency on `perspective.el`; no wconf fallback
-- Treemacs API: v2 (`-node-type` suffix macros)
+- Perspective: hard dependency on `persp-mode`; no wconf fallback
+- Sidebar: plain side window with custom keymap (not Treemacs)
 
 ---
 
-## 1. `agent-shell-commander-peek`
+## 1. `agent-shell-hq-peek`
 
 A transient posframe / childframe switcher that floats over the current frame.
 
 ### 1.1 Invocation
 
 ```
-M-x agent-shell-commander-peek
+M-x agent-shell-hq-peek
 ```
 
-Displays a posframe positioned relative to the current frame. Position is controlled by the customizable variable `agent-shell-commander-peek-position`, one of: `'top`, `'bottom`, `'left`, `'right`. Defaults to `'right`.
+Displays a posframe positioned relative to the current frame. Position is controlled by the customizable variable `agent-shell-hq-peek-position`, one of: `'top`, `'bottom`, `'left`, `'right`. Defaults to `'right`.
 
 ### 1.2 Layout
 
@@ -48,7 +48,7 @@ Displays a posframe positioned relative to the current frame. Position is contro
 +------------------------------------+
 ```
 
-The buffer that was active when `agent-shell-commander-peek` was invoked remains visible behind the posframe, providing natural context. No preview pane is embedded inside the posframe.
+The buffer that was active when `agent-shell-hq-peek` was invoked remains visible behind the posframe, providing natural context. No preview pane is embedded inside the posframe.
 
 - **Project headers** — bold face, derived from projectile project name or `project-name` via `agent-shell--project-name`.
 - **Buffer entries** — indented under their project. Cursor line highlighted.
@@ -70,9 +70,9 @@ Buffers are collected via `(agent-shell-buffers)` then grouped by project root (
 
 ### 1.5 Posframe sizing
 
-- Width: `agent-shell-commander-peek-width` (default: 50 columns)
-- Height: fit-to-content up to `agent-shell-commander-peek-height` (default: 40 rows)
-- Position: anchored to `agent-shell-commander-peek-position` edge of the selected frame
+- Width: `agent-shell-hq-peek-width` (default: 52 columns)
+- Height: fit-to-content up to `agent-shell-hq-peek-height` (default: 60 rows)
+- Position: anchored to `agent-shell-hq-peek-position` edge of the selected frame
 
 ### 1.6 Dependencies
 
@@ -83,23 +83,23 @@ Buffers are collected via `(agent-shell-buffers)` then grouped by project root (
 
 ---
 
-## 2. `agent-shell-commander-toggle`
+## 2. `agent-shell-hq-toggle`
 
-A persistent workspace / perspective-based experience with a Treemacs sidebar.
+A persistent workspace / perspective-based experience with a sidebar.
 
 ### 2.1 Invocation
 
 ```
-M-x agent-shell-commander-toggle
+M-x agent-shell-hq-toggle
 ```
 
-Toggles the agent-shell commander workspace. First call creates/shows it; second call hides it (restores prior window configuration). Implemented as an ephemeral perspective (using `persp-mode` or `perspective.el`) named `*agent-shell-commander*`, or falling back to a saved window configuration if neither is available.
+Toggles the agent-shell-hq workspace. First call creates/shows it; second call hides it (returns to the prior perspective). Implemented as a named perspective (`*agent-shell*`) using `persp-mode`.
 
 ### 2.2 Layout
 
 ```
 +------------------+-----------------------------------+
-| TREEMACS SIDEBAR |  MAIN AGENT-SHELL BUFFER          |
+| SIDEBAR          |  MAIN AGENT-SHELL BUFFER          |
 |                  |                                   |
 | ▾ Project 1      |  [agent-shell-mode content]       |
 |   ● buffer-1     |                                   |
@@ -114,44 +114,47 @@ Toggles the agent-shell commander workspace. First call creates/shows it; second
 +------------------+-----------------------------------+
 ```
 
-- The sidebar is a dedicated Treemacs buffer (custom node type, not file tree).
+- The sidebar is a plain side window with a custom read-only buffer and keymap.
 - The main pane shows the currently selected agent-shell buffer.
 - Both panes persist across project switches.
 
 ### 2.3 Sidebar behavior
 
-- Sidebar entries are custom Treemacs nodes backed by `agent-shell-buffers`.
-- Project groupings are collapsible Treemacs tree nodes (`▸` / `▾`).
-- The current buffer's entry is highlighted / marked in the sidebar.
-- Sidebar updates automatically when agent-shell buffers are created or killed (via `kill-buffer-hook` and `agent-shell-mode-hook`).
+- Sidebar entries are backed by `agent-shell-buffers`.
+- Project groupings are collapsible (`▸` / `▾`).
+- The current buffer's entry is highlighted in the sidebar.
+- Sidebar is refreshed manually via `g` or automatically after `s` (new shell).
 
 ### 2.4 Navigation and keybindings (sidebar focused)
 
-| Key         | Action                                           |
-|-------------|--------------------------------------------------|
-| `RET` / `o` | Show buffer in main pane                         |
-| `TAB`       | Collapse / expand project group                  |
-| `p`         | Preview buffer in main pane without moving focus |
-| `s`         | New agent-shell in project at point              |
-| `d`         | Kill buffer at point (with confirmation)         |
-| `q`         | `agent-shell-commander-toggle` (hide workspace)  |
+| Key         | Action                                        |
+|-------------|-----------------------------------------------|
+| `n` / `j`   | Move to next entry and preview                |
+| `p` / `k`   | Move to previous entry and preview            |
+| `RET`       | Select buffer / toggle project collapse       |
+| `TAB`       | Collapse / expand project group               |
+| `r`         | Generate session label for highlighted buffer |
+| `g`         | Refresh buffer list                           |
+| `s`         | New agent-shell in current project            |
+| `q`         | `agent-shell-hq-toggle` (hide workspace)      |
+| `?`         | Show keybinding help (transient)              |
 
 ### 2.5 Preview behavior
 
-Pressing `p` (or navigating with preview mode enabled) shows the buffer in the main pane but keeps focus in the sidebar. The main pane displays the buffer in its actual mode. Switching focus to the main pane (`C-x o` or mouse) behaves normally — the buffer is live and editable.
+Navigating with `n`/`p` shows the buffer in the main pane but keeps focus in the sidebar. The main pane displays the buffer in its actual mode. Switching focus to the main pane (`C-x o` or mouse) behaves normally — the buffer is live and editable.
 
 ### 2.6 Perspective / workspace handling
 
-Hard dependency on `perspective.el`.
+Hard dependency on `persp-mode`.
 
-- On first invocation: record the current perspective name, create (or switch to) perspective `*agent-shell-commander*`, set up sidebar + main pane.
-- On toggle-off: switch back to the recorded previous perspective. The `*agent-shell-commander*` perspective is not destroyed, so re-entering restores full state.
+- On first invocation: record the current perspective name, create (or switch to) perspective `*agent-shell*`, set up sidebar + main pane.
+- On toggle-off: switch back to the recorded previous perspective. The `*agent-shell*` perspective is not destroyed, so re-entering restores full state.
 - Buffer-preference: reuse existing agent-shell buffers, never create duplicates.
 
 ### 2.7 Dependencies
 
-- `treemacs` (v2 node API)
-- `perspective.el` (hard dependency)
+- `persp-mode` (hard dependency)
+- `transient` (help menu)
 - `agent-shell`
 - `projectile` or `project.el`
 - `svg` (built-in)
@@ -181,19 +184,16 @@ Detection logic:
 
 ### 3.2 SVG rendering
 
-Icons are rendered via `(svg-create WIDTH HEIGHT)` using Emacs's built-in `svg` library.
-- **Small** (14×14 px) — posframe list entries and Treemacs sidebar entries
+Icons are loaded from `icons/` as SVG files using Emacs's built-in `create-image`.
+- **Small** (14×14 px) — posframe list entries and sidebar entries
 
-No timer. Icons are regenerated only when state changes for a given buffer, detected via `post-command-hook` while the UI is visible.
+No timer. Icons are loaded lazily on first use and cached. State is checked per-buffer during render.
 
 ### 3.3 Icon cache
 
-Icons are cached as `image` objects keyed by `state` — three entries total. Cache is invalidated on theme change (`enable-theme-functions` hook).
+Icons are cached as `image` objects keyed by `state` — three entries total (`idle`, `busy`, `dead`). Cache is populated lazily on first call to `agent-shell-hq-peek--svg-icon`.
 
-Colors derived from theme faces:
-- `busy`: `warning` face foreground
-- `idle`: `shadow` face foreground
-- `dead`: `error` face foreground
+Colors are baked into the SVG files on disk (not derived dynamically from theme faces).
 
 ---
 
@@ -202,44 +202,39 @@ Colors derived from theme faces:
 ### 4.1 Buffer grouping
 
 ```elisp
-(defun agent-shell-commander--grouped-buffers ()
-  "Return alist of (project-root . buffer-list) sorted current-project-first."
+(defun agent-shell-hq-peek--grouped-buffers (current-root)
+  "Return list of (root project-name buffers) sorted current-project-first."
   ...)
 ```
 
-Groups `(agent-shell-buffers)` by `(agent-shell-cwd)` per buffer. Current project (from caller's context at invocation time) is placed first.
+Groups `(agent-shell-buffers)` by `(agent-shell-cwd)` per buffer. Current project (from caller's context at invocation time) is placed first; remaining groups sorted alphabetically by project name.
 
 ### 4.2 Project display name
 
-```elisp
-(defun agent-shell-commander--project-name (root)
-  "Return display name for project ROOT.")
-```
-
-Uses `projectile-project-name` if available, otherwise the directory basename.
+Resolved via `agent-shell--project-name` (called inside the buffer), which uses `projectile-project-name` if available, otherwise the directory basename.
 
 ### 4.3 Customization group
 
-All variables live under the `agent-shell-commander` customization group, child of `agent-shell`.
+All variables live under the `agent-shell-hq-peek` customization group, child of `agent-shell`.
 
 Key variables:
 
-| Variable                              | Type    | Default  | Description                 |
-|---------------------------------------|---------|----------|-----------------------------|
-| `agent-shell-commander-peek-position` | symbol  | `'right` | Posframe anchor edge        |
-| `agent-shell-commander-peek-width`    | integer | 50       | Posframe width in columns   |
-| `agent-shell-commander-peek-height`   | integer | 40       | Posframe max height in rows |
-| `agent-shell-commander-sidebar-width` | integer | 25       | Treemacs sidebar width      |
+| Variable                             | Type    | Default  | Description                  |
+|--------------------------------------|---------|----------|------------------------------|
+| `agent-shell-hq-peek-position`       | symbol  | `'right` | Posframe anchor edge         |
+| `agent-shell-hq-peek-width`          | integer | 52       | Posframe width in columns    |
+| `agent-shell-hq-peek-height`         | integer | 60       | Posframe max height in rows  |
+| `agent-shell-hq-toggle-sidebar-width`| integer | 36       | Sidebar width in columns     |
 
 ---
 
 ## 5. File Structure
 
 ```
-agent-shell-commander/
-├── agent-shell-commander.el          ; package entry point, autoloads, shared utils
-├── agent-shell-commander-peek.el     ; posframe switcher
-├── agent-shell-commander-toggle.el   ; treemacs/perspective workspace
-├── agent-shell-commander-svg.el      ; SVG icon rendering and caching
-└── SPEC.md                           ; this file
+agent-shell-hq/
+├── agent-shell-hq-peek.el    ; posframe switcher, shared buffer grouping
+├── agent-shell-hq-toggle.el  ; sidebar workspace
+├── agent-shell-hq-label.el   ; async session labelling via Anthropic REST API
+├── icons/                    ; idle.svg, busy.svg, dead.svg
+└── SPEC.md                   ; this file
 ```
