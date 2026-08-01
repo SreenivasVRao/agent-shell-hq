@@ -64,7 +64,6 @@
     (define-key map (kbd "RET") #'agent-shell-commander-toggle-select)
     (define-key map (kbd "TAB") #'agent-shell-commander-toggle-collapse)
     (define-key map (kbd "g")   #'agent-shell-commander-toggle-refresh)
-    (define-key map (kbd "r")   #'agent-shell-commander-toggle-label-current)
     (define-key map (kbd "s")   #'agent-shell-commander-toggle-new-shell)
     (define-key map (kbd "q")   #'agent-shell-commander-toggle)
     (define-key map (kbd "C-g") #'agent-shell-commander-toggle)
@@ -281,8 +280,9 @@ On a project header: toggle collapse."
     ("q"   "quit workspace"    agent-shell-commander-toggle)
     ("?"   "this help"         agent-shell-commander-toggle-help)]])
 
-;; Bound after the transient is defined so this top-level form always
-;; runs on reload (defvar only sets the keymap on first load).
+;; Top-level define-key calls so these bindings are updated on every
+;; reload (defvar only initialises the keymap on first load).
+(define-key agent-shell-commander-toggle-map (kbd "r") #'agent-shell-commander-toggle-label-current)
 (define-key agent-shell-commander-toggle-map (kbd "?") #'agent-shell-commander-toggle-help)
 
 ;;;; Workspace setup / teardown
