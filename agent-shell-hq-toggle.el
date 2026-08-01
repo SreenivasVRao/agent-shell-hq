@@ -120,8 +120,7 @@ Intentionally dim — just enough to show position without glare.")
 
 (defun agent-shell-hq-toggle--render ()
   "Render the sidebar buffer and rebuild the entries list."
-  (let ((groups (agent-shell-hq-peek--grouped-buffers
-                 (ignore-errors (agent-shell-cwd)))))
+  (let ((groups (agent-shell-hq-peek--grouped-buffers)))
     (with-current-buffer (get-buffer-create agent-shell-hq-toggle--sidebar-name)
       (let ((inhibit-read-only t))
         (erase-buffer)

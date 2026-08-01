@@ -154,9 +154,8 @@ Uses the existing viewport buffer when one already exists, so its mode
 
 ;;;; Buffer grouping
 
-(defun agent-shell-hq-peek--grouped-buffers (current-root)
-  "Return list of (root project-name buffers) groups.
-Group matching CURRENT-ROOT is placed first; others alphabetical."
+(defun agent-shell-hq-peek--grouped-buffers ()
+  "Return list of (root project-name buffers) groups, sorted alphabetically."
   (let ((table (make-hash-table :test 'equal))
         (order nil))
     (dolist (buf (agent-shell-buffers))
@@ -167,14 +166,15 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
           (push root order))
         (let ((entry (gethash root table)))
           (setcar (cdr entry) (append (cadr entry) (list buf))))))
-    (let* ((groups (mapcar (lambda (root)
-                             (let ((e (gethash root table)))
-                               (list root (car e) (cadr e))))
-                           (nreverse order)))
-           (current (seq-filter (lambda (g) (equal (car g) current-root)) groups))
-           (rest    (seq-filter (lambda (g) (not (equal (car g) current-root))) groups)))
-      (append current
-              (sort rest (lambda (a b) (string< (cadr a) (cadr b))))))))
+    (let ((groups (mapcar (lambda (root)
+                            (let ((e (gethash root table)))
+                              (list root (car e)
+                                    (sort (copy-sequence (cadr e))
+                                          (lambda (a b)
+                                            (string< (buffer-name a)
+                                                     (buffer-name b)))))))
+                          (nreverse order))))
+      (sort groups (lambda (a b) (string< (cadr a) (cadr b)))))))
 
 ;;;; Rendering
 
@@ -327,8 +327,7 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
 n/p navigates, RET selects, g/q/C-g quits."
   (interactive)
   (let* ((origin-win   (selected-window))
-         (current-root (ignore-errors (agent-shell-cwd)))
-         (groups       (agent-shell-hq-peek--grouped-buffers current-root)))
+         (groups       (agent-shell-hq-peek--grouped-buffers)))
     (unless groups
       (user-error "No agent-shell buffers found"))
     (setq agent-shell-hq-peek--origin-window origin-win
