@@ -71,10 +71,12 @@ Intentionally dim — just enough to show position without glare.")
     (define-key map (kbd "k")   #'agent-shell-hq-toggle-prev)
     (define-key map (kbd "RET") #'agent-shell-hq-toggle-select)
     (define-key map (kbd "TAB") #'agent-shell-hq-toggle-collapse)
+    (define-key map (kbd "r")   #'agent-shell-hq-toggle-label-current)
     (define-key map (kbd "g")   #'agent-shell-hq-toggle-refresh)
     (define-key map (kbd "s")   #'agent-shell-hq-toggle-new-shell)
     (define-key map (kbd "q")   #'agent-shell-hq-toggle)
     (define-key map (kbd "C-g") #'agent-shell-hq-toggle)
+    (define-key map (kbd "?")   #'agent-shell-hq-toggle-help)
     map)
   "Keymap for the agent-shell-hq toggle sidebar.")
 
@@ -287,11 +289,6 @@ On a project header: toggle collapse."
    ["Quit"
     ("q"   "quit workspace"    agent-shell-hq-toggle)
     ("?"   "this help"         agent-shell-hq-toggle-help)]])
-
-;; Top-level define-key calls so these bindings are updated on every
-;; reload (defvar only initialises the keymap on first load).
-(define-key agent-shell-hq-toggle-map (kbd "r") #'agent-shell-hq-toggle-label-current)
-(define-key agent-shell-hq-toggle-map (kbd "?") #'agent-shell-hq-toggle-help)
 
 ;;;; Workspace setup / teardown
 
