@@ -102,7 +102,7 @@ In `packages.el`:
 
 ```elisp
 (package! agent-shell-hq
-  :recipe (:host nil :repo "https://github.com/YOUR-USERNAME/agent-shell-hq"
+  :recipe (:host nil :repo "https://github.com/sreenivasvrao/agent-shell-hq"
            :files ("*.el")))
 ```
 

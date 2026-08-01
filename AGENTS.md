@@ -14,6 +14,7 @@ All public symbols use the `agent-shell-hq-` prefix; internal helpers use `agent
 
 | File                       | Purpose                                                 |
 |----------------------------|---------------------------------------------------------|
+| `agent-shell-hq.el`        | Umbrella entry point — `require`s toggle (which pulls in peek + label) |
 | `agent-shell-hq-peek.el`   | Posframe switcher — `agent-shell-hq-peek` entry point   |
 | `agent-shell-hq-toggle.el` | Sidebar workspace — `agent-shell-hq-toggle` entry point |
 | `agent-shell-hq-label.el`  | Async label generation via external CLI subprocess      |
