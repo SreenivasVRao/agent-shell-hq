@@ -11,6 +11,7 @@
 (require 'agent-shell-viewport)
 (require 'agent-shell-commander-peek)
 (require 'persp-mode)
+(require 'transient)
 
 ;;;; Customization
 
@@ -65,6 +66,7 @@
     (define-key map (kbd "s")   #'agent-shell-commander-toggle-new-shell)
     (define-key map (kbd "q")   #'agent-shell-commander-toggle)
     (define-key map (kbd "C-g") #'agent-shell-commander-toggle)
+    (define-key map (kbd "?")   #'agent-shell-commander-toggle-help)
     map)
   "Keymap for the agent-shell-commander toggle sidebar.")
 
@@ -106,16 +108,6 @@
                            'face 'default
                            'agent-shell-commander-toggle-buffer buf)))))
             (insert "\n")))
-        ;; Pad to push footer to the bottom of the visible window
-        (let* ((win         (get-buffer-window agent-shell-commander-toggle--sidebar-name))
-               (win-height  (if win (window-text-height win) 40))
-               (used-lines  (line-number-at-pos (point)))
-               (footer-lines 3)
-               (padding     (max 1 (- win-height used-lines footer-lines))))
-          (insert (make-string padding ?\n)))
-        (insert (propertize "  n/p  navigate   RET  select\n" 'face 'shadow))
-        (insert (propertize "  TAB  collapse     g  refresh\n" 'face 'shadow))
-        (insert (propertize "    s  new shell     q  quit\n"   'face 'shadow))
         (setq agent-shell-commander-toggle--entries
               (nreverse agent-shell-commander-toggle--entries))
         (setq buffer-read-only t)
@@ -247,6 +239,22 @@ On a project header: toggle collapse."
     (when-let ((sidebar-win (get-buffer-window agent-shell-commander-toggle--sidebar-name)))
       (select-window sidebar-win)
       (agent-shell-commander-toggle-refresh))))
+
+;;;; Help transient
+
+(transient-define-prefix agent-shell-commander-toggle-help ()
+  "Keybindings for the agent-shell-commander sidebar."
+  [["Navigate"
+    ("n" "next entry"          agent-shell-commander-toggle-next)
+    ("p" "previous entry"      agent-shell-commander-toggle-prev)]
+   ["Actions"
+    ("RET" "select / collapse" agent-shell-commander-toggle-select)
+    ("TAB" "collapse / expand" agent-shell-commander-toggle-collapse)
+    ("g"   "refresh list"      agent-shell-commander-toggle-refresh)
+    ("s"   "new shell"         agent-shell-commander-toggle-new-shell)]
+   ["Quit"
+    ("q"   "quit workspace"    agent-shell-commander-toggle)
+    ("?"   "this help"         agent-shell-commander-toggle-help)]])
 
 ;;;; Workspace setup / teardown
 
