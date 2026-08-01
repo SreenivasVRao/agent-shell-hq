@@ -344,7 +344,7 @@ n/p navigates, RET selects, g/q/C-g quits."
                    :poshandler            #'agent-shell-hq-peek--poshandler
                    :width                 agent-shell-hq-peek-width
                    :max-height            agent-shell-hq-peek-height
-                   :internal-border-width 10
+                   :internal-border-width 4
                    :border-color          (face-foreground 'shadow nil t)
                    :accept-focus          t)
     (agent-shell-hq-peek--preview-current)
