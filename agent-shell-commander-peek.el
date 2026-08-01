@@ -122,25 +122,26 @@ Uses the existing viewport buffer when one already exists, so its mode
          (svg  (svg-create size size))
          (cx   (/ size 2.0))
          (cy   (/ size 2.0))
-         (r    5.0))
+         (r    5.5))
     (pcase state
       ('busy
+       ;; Solid yellow circle — processing
        (svg-circle svg cx cy r
                    :fill (face-foreground 'warning nil t)
-                   :stroke "none")
-       (svg-polygon svg (list (cons (- cx 3) (- cy 3.5))
-                              (cons (+ cx 3) (- cy 3.5))
-                              (cons cx cy))
-                    :fill (face-background 'default nil t))
-       (svg-polygon svg (list (cons cx cy)
-                              (cons (- cx 3) (+ cy 3.5))
-                              (cons (+ cx 3) (+ cy 3.5)))
-                    :fill (face-background 'default nil t)))
+                   :stroke "none"))
       ('idle
+       ;; Green circle with white checkmark — ready
        (svg-circle svg cx cy r
-                   :fill "none"
-                   :stroke (face-foreground 'shadow nil t)
-                   :stroke-width 1.5))
+                   :fill (face-foreground 'success nil t)
+                   :stroke "none")
+       (svg-polyline svg (list (cons 3.0 7.0)
+                               (cons 5.5 9.5)
+                               (cons 11.0 3.5))
+                     :stroke "white"
+                     :stroke-width 1.8
+                     :fill "none"
+                     :stroke-linecap "round"
+                     :stroke-linejoin "round"))
       ('dead
        (svg-rectangle svg (- cx 4) (- cy 1) 8 2
                       :fill (face-foreground 'shadow nil t)
