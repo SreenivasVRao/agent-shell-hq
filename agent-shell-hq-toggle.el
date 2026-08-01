@@ -21,6 +21,16 @@
   :type 'integer
   :group 'agent-shell-hq-peek)
 
+(defcustom agent-shell-hq-toggle-lock-perspective nil
+  "When non-nil, restrict the agent-shell workspace to only agent-shell buffers.
+While the *agent-shell* perspective is active, `consult-buffer' and other
+persp-mode-aware commands only offer agent-shell sessions.
+`projectile-find-file' and `project-find-file' are blocked with a message
+pointing to `my/agent-shell-share-project-file' and
+`my/agent-shell-share-any-file', which continue to work normally."
+  :type 'boolean
+  :group 'agent-shell-hq-peek)
+
 ;;;; Constants
 
 (defconst agent-shell-hq-toggle--persp-name "*agent-shell*")
@@ -122,6 +132,41 @@ Intentionally dim — just enough to show position without glare.")
   (agent-shell-hq-toggle-mouse-select event)
   (agent-shell-hq-toggle-select))
 
+;;;; Perspective locking
+
+(defun agent-shell-hq-toggle--in-locked-persp-p ()
+  "Return non-nil when inside the locked agent-shell perspective."
+  (and agent-shell-hq-toggle-lock-perspective
+       (string= (safe-persp-name (get-current-persp))
+                agent-shell-hq-toggle--persp-name)))
+
+(defun agent-shell-hq-toggle--populate-perspective ()
+  "Restrict the current perspective to agent-shell and sidebar buffers.
+Removes every other buffer from the perspective so that `consult-buffer'
+and other persp-mode-aware pickers only show agent-shell sessions."
+  (when agent-shell-hq-toggle-lock-perspective
+    (let* ((persp      (get-current-persp))
+           (shell-bufs (agent-shell-buffers))
+           (sidebar    (get-buffer agent-shell-hq-toggle--sidebar-name))
+           (keep       (append shell-bufs
+                               (when (buffer-live-p sidebar) (list sidebar)))))
+      (dolist (buf (copy-sequence (persp-buffers persp)))
+        (unless (memq buf keep)
+          (persp-remove-buffer buf persp t t)))
+      (dolist (buf shell-bufs)
+        (when (buffer-live-p buf)
+          (persp-add-buffer buf persp nil t))))))
+
+(defun agent-shell-hq-toggle--block-file-finder (&rest _)
+  "Signal a user-error when a file-finder is invoked inside the locked workspace."
+  (when (agent-shell-hq-toggle--in-locked-persp-p)
+    (user-error
+     "Use `my/agent-shell-share-project-file' or \
+`my/agent-shell-share-any-file' in the agent-shell workspace")))
+
+(advice-add 'projectile-find-file :before #'agent-shell-hq-toggle--block-file-finder)
+(advice-add 'project-find-file    :before #'agent-shell-hq-toggle--block-file-finder)
+
 ;;;; Auto-refresh helpers
 
 (defun agent-shell-hq-toggle--capture-states ()
@@ -142,6 +187,7 @@ accesses change MRU order but not actual busy/idle/dead state."
         (setq agent-shell-hq-toggle--state-snapshot current)
         (let ((buf (agent-shell-hq-toggle--current-buffer)))
           (agent-shell-hq-toggle--render)
+          (agent-shell-hq-toggle--populate-perspective)
           (agent-shell-hq-toggle--restore-idx buf)
           (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx))))))
 
@@ -334,6 +380,7 @@ On a project header: toggle collapse."
   (interactive)
   (let ((buf (agent-shell-hq-toggle--current-buffer)))
     (agent-shell-hq-toggle--render)
+    (agent-shell-hq-toggle--populate-perspective)
     (agent-shell-hq-toggle--restore-idx buf)
     (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
     (agent-shell-hq-toggle--preview-current)))
@@ -386,6 +433,7 @@ On a project header: toggle collapse."
   (setq agent-shell-hq-toggle--current-idx 0
         agent-shell-hq-toggle--collapsed    nil)
   (agent-shell-hq-toggle--render)
+  (agent-shell-hq-toggle--populate-perspective)
   (agent-shell-hq-toggle--highlight 0)
   (agent-shell-hq-toggle--preview-current)
   (select-window (get-buffer-window agent-shell-hq-toggle--sidebar-name))
