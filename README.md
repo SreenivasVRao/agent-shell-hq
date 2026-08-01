@@ -86,8 +86,7 @@ Clone this repo and add the directory to your `load-path`:
 
 ```elisp
 (add-to-list 'load-path "/path/to/agent-shell-hq")
-(require 'agent-shell-hq-toggle)
-(require 'agent-shell-hq-peek)
+(require 'agent-shell-hq)
 ```
 
 Bind the entry points to keys of your choice:
@@ -110,34 +109,25 @@ In `packages.el`:
 In `config.el`:
 
 ```elisp
-(use-package! agent-shell-hq-toggle
-  :commands agent-shell-hq-toggle
+(use-package! agent-shell-hq
+  :commands (agent-shell-hq-toggle agent-shell-hq-peek agent-shell-hq-label)
   :custom
   ;; Width of the sidebar listing agent-shell buffers (columns)
   (agent-shell-hq-toggle-sidebar-width 50)
-  :bind
-  ("C-c a h" . agent-shell-hq-toggle))
-
-(use-package! agent-shell-hq-peek
-  :commands agent-shell-hq-peek
-  :custom
   ;; Where the peek posframe is anchored: top, bottom, left, right
   (agent-shell-hq-peek-position 'right)
   ;; Width of the peek posframe (columns)
   (agent-shell-hq-peek-width 52)
   ;; Maximum height of the peek posframe (rows)
   (agent-shell-hq-peek-height 60)
-  :bind
-  ("C-c a p" . agent-shell-hq-peek))
-
-(use-package! agent-shell-hq-label
-  :commands agent-shell-hq-label
-  :custom
   ;; CLI command that receives the prompt as its final argument
   (agent-shell-hq-label-command '("claude" "-p" "--model" "haiku"))
   ;; Characters of buffer content (from the end) used as context for the title
   (agent-shell-hq-label-context-chars 2000)
   ;; Prompt template sent to the command (%s = buffer context)
   (agent-shell-hq-label-prompt
-   "Reply with ONLY a terse 8-10 word title for this conversation, lowercase, no punctuation:\n\n%s"))
+   "Reply with ONLY a terse 8-10 word title for this conversation, lowercase, no punctuation:\n\n%s")
+  :bind
+  ("C-c a h" . agent-shell-hq-toggle)
+  ("C-c a p" . agent-shell-hq-peek))
 ```
