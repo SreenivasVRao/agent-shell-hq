@@ -54,6 +54,19 @@ One of `top', `bottom', `left', `right'."
 (defvar agent-shell-commander-peek--origin-buffer nil
   "Buffer displayed in the origin window when peek was invoked (restored on quit).")
 
+(defvar agent-shell-commander-peek--saved-terminal-map nil
+  "Saved `overriding-terminal-local-map' value, restored when peek is dismissed.")
+
+;; Minimal override map — only C-g, so normal editing is unaffected in the
+;; parent frame. `overriding-terminal-local-map' has the highest priority and
+;; fires before the child-frame keymap lookup, making C-g reliable regardless
+;; of which frame currently has focus.
+(defvar agent-shell-commander-peek--quit-override-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-g") #'agent-shell-commander-peek-quit)
+    map)
+  "Terminal-wide override map active while the peek posframe is shown.")
+
 ;;;; Keymap
 
 (defvar agent-shell-commander-peek-map
@@ -70,6 +83,14 @@ One of `top', `bottom', `left', `right'."
     (define-key map (kbd "s")   #'agent-shell-commander-peek-new-shell)
     map)
   "Keymap active inside the agent-shell-commander peek posframe.")
+
+;;;; Override map helpers
+
+(defun agent-shell-commander-peek--clear-override ()
+  "Restore `overriding-terminal-local-map' to its pre-peek value."
+  (when (eq overriding-terminal-local-map agent-shell-commander-peek--quit-override-map)
+    (setq overriding-terminal-local-map agent-shell-commander-peek--saved-terminal-map))
+  (setq agent-shell-commander-peek--saved-terminal-map nil))
 
 ;;;; Preferred display buffer
 
@@ -262,6 +283,7 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
               (shell-buf (plist-get entry :buffer))
               (disp-buf  (agent-shell-commander-peek--preferred-buffer shell-buf)))
     (let ((win agent-shell-commander-peek--origin-window))
+      (agent-shell-commander-peek--clear-override)
       (posframe-delete agent-shell-commander-peek--buffer-name)
       (when-let ((pb (get-buffer agent-shell-commander-peek--buffer-name)))
         (kill-buffer pb))
@@ -274,6 +296,7 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
 (defun agent-shell-commander-peek-quit ()
   "Dismiss the peek posframe and restore the original buffer."
   (interactive)
+  (agent-shell-commander-peek--clear-override)
   (let ((win      agent-shell-commander-peek--origin-window)
         (orig-buf agent-shell-commander-peek--origin-buffer))
     (posframe-delete agent-shell-commander-peek--buffer-name)
@@ -317,6 +340,8 @@ n/p navigates, RET selects, g/q/C-g quits."
     (agent-shell-commander-peek--highlight-line 0)
     (with-current-buffer agent-shell-commander-peek--buffer-name
       (use-local-map agent-shell-commander-peek-map))
+    (setq agent-shell-commander-peek--saved-terminal-map overriding-terminal-local-map
+          overriding-terminal-local-map agent-shell-commander-peek--quit-override-map)
     (posframe-show agent-shell-commander-peek--buffer-name
                    :poshandler            #'agent-shell-commander-peek--poshandler
                    :width                 agent-shell-commander-peek-width
