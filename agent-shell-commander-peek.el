@@ -10,7 +10,6 @@
 (require 'agent-shell)
 (require 'agent-shell-viewport)
 (require 'posframe)
-(require 'svg)
 
 ;;;; Customization
 
@@ -114,39 +113,32 @@ Uses the existing viewport buffer when one already exists, so its mode
                (buffer-live-p display-buf))
       (set-window-buffer agent-shell-commander-peek--origin-window display-buf))))
 
-;;;; SVG status icons
+;;;; SVG icon files
+
+(defvar agent-shell-commander-peek--icon-dir
+  (expand-file-name "icons"
+                    (file-name-directory (or load-file-name
+                                             (buffer-file-name)
+                                             default-directory)))
+  "Directory containing the SVG icon files.")
+
+(defvar agent-shell-commander-peek--icon-cache nil
+  "Alist of (STATE . IMAGE) loaded from `agent-shell-commander-peek--icon-dir'.")
+
+(defun agent-shell-commander-peek--load-icons ()
+  "Load SVG icon files from disk into `agent-shell-commander-peek--icon-cache'."
+  (setq agent-shell-commander-peek--icon-cache
+        (mapcar (lambda (state)
+                  (let ((path (expand-file-name (format "%s.svg" state)
+                                                agent-shell-commander-peek--icon-dir)))
+                    (cons state (create-image path 'svg nil :ascent 'center))))
+                '(idle busy dead))))
 
 (defun agent-shell-commander-peek--svg-icon (state)
-  "Return a 20×20 SVG image for STATE (`busy', `idle', or `dead')."
-  (let* ((size 20)
-         (svg  (svg-create size size))
-         (cx   (/ size 2.0))
-         (cy   (/ size 2.0))
-         (r    8.5))
-    (pcase state
-      ('busy
-       ;; Solid yellow circle — processing
-       (svg-circle svg cx cy r
-                   :fill (face-foreground 'warning nil t)
-                   :stroke "none"))
-      ('idle
-       ;; Green circle with white checkmark — ready
-       (svg-circle svg cx cy r
-                   :fill (face-foreground 'success nil t)
-                   :stroke "none")
-       (svg-polyline svg (list (cons 4.5  10.5)
-                               (cons 8.5  14.5)
-                               (cons 16.0  5.5))
-                     :stroke "white"
-                     :stroke-width 2.5
-                     :fill "none"
-                     :stroke-linecap "round"
-                     :stroke-linejoin "round"))
-      ('dead
-       (svg-rectangle svg 3.0 8.5 14.0 3.0
-                      :fill (face-foreground 'shadow nil t)
-                      :rx 1.5)))
-    (svg-image svg :ascent 'center)))
+  "Return the cached SVG image for STATE (`busy', `idle', or `dead')."
+  (unless agent-shell-commander-peek--icon-cache
+    (agent-shell-commander-peek--load-icons))
+  (alist-get state agent-shell-commander-peek--icon-cache))
 
 (defun agent-shell-commander-peek--buffer-state (buf)
   "Return `busy', `idle', or `dead' for BUF."
