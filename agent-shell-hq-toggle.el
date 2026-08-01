@@ -16,7 +16,7 @@
 
 ;;;; Customization
 
-(defcustom agent-shell-hq-toggle-sidebar-width 36
+(defcustom agent-shell-hq-toggle-sidebar-width 50
   "Width of the toggle sidebar in columns."
   :type 'integer
   :group 'agent-shell-hq-peek)
@@ -65,20 +65,56 @@ Intentionally dim — just enough to show position without glare.")
 (defvar agent-shell-hq-toggle-map
   (let ((map (make-sparse-keymap)))
     (suppress-keymap map t)
-    (define-key map (kbd "n")   #'agent-shell-hq-toggle-next)
-    (define-key map (kbd "j")   #'agent-shell-hq-toggle-next)
-    (define-key map (kbd "p")   #'agent-shell-hq-toggle-prev)
-    (define-key map (kbd "k")   #'agent-shell-hq-toggle-prev)
-    (define-key map (kbd "RET") #'agent-shell-hq-toggle-select)
-    (define-key map (kbd "TAB") #'agent-shell-hq-toggle-collapse)
-    (define-key map (kbd "r")   #'agent-shell-hq-toggle-label-current)
-    (define-key map (kbd "g")   #'agent-shell-hq-toggle-refresh)
-    (define-key map (kbd "s")   #'agent-shell-hq-toggle-new-shell)
-    (define-key map (kbd "q")   #'agent-shell-hq-toggle)
-    (define-key map (kbd "C-g") #'agent-shell-hq-toggle)
-    (define-key map (kbd "?")   #'agent-shell-hq-toggle-help)
+    (define-key map (kbd "n")             #'agent-shell-hq-toggle-next)
+    (define-key map (kbd "j")             #'agent-shell-hq-toggle-next)
+    (define-key map (kbd "p")             #'agent-shell-hq-toggle-prev)
+    (define-key map (kbd "k")             #'agent-shell-hq-toggle-prev)
+    (define-key map (kbd "RET")           #'agent-shell-hq-toggle-select)
+    (define-key map (kbd "TAB")           #'agent-shell-hq-toggle-collapse)
+    (define-key map (kbd "r")             #'agent-shell-hq-toggle-label-current)
+    (define-key map (kbd "g")             #'agent-shell-hq-toggle-refresh)
+    (define-key map (kbd "s")             #'agent-shell-hq-toggle-new-shell)
+    (define-key map (kbd "q")             #'agent-shell-hq-toggle)
+    (define-key map (kbd "C-g")           #'agent-shell-hq-toggle)
+    (define-key map (kbd "?")             #'agent-shell-hq-toggle-help)
+    (define-key map (kbd "<mouse-1>")     #'agent-shell-hq-toggle-mouse-select)
+    (define-key map (kbd "<double-mouse-1>") #'agent-shell-hq-toggle-mouse-select-double)
     map)
   "Keymap for the agent-shell-hq toggle sidebar.")
+
+;;;; Mouse commands
+
+(defun agent-shell-hq-toggle-mouse-select (event)
+  "Move sidebar selection to the entry clicked by mouse EVENT and preview it."
+  (interactive "e")
+  (with-current-buffer (get-buffer agent-shell-hq-toggle--sidebar-name)
+    (let* ((pos       (posn-point (event-start event)))
+           (buf-prop  (when pos (get-text-property pos 'agent-shell-hq-toggle-buffer)))
+           (root-prop (when pos (get-text-property pos 'agent-shell-hq-toggle-root))))
+      (cond
+       (buf-prop
+        (when-let ((idx (cl-position-if
+                         (lambda (e)
+                           (and (eq (plist-get e :type) 'buffer)
+                                (eq (plist-get e :buffer) buf-prop)))
+                         agent-shell-hq-toggle--entries)))
+          (setq agent-shell-hq-toggle--current-idx idx)
+          (agent-shell-hq-toggle--highlight idx)
+          (agent-shell-hq-toggle--preview-current)))
+       (root-prop
+        (when-let ((idx (cl-position-if
+                         (lambda (e)
+                           (and (eq (plist-get e :type) 'project)
+                                (equal (plist-get e :root) root-prop)))
+                         agent-shell-hq-toggle--entries)))
+          (setq agent-shell-hq-toggle--current-idx idx)
+          (agent-shell-hq-toggle--highlight idx)))))))
+
+(defun agent-shell-hq-toggle-mouse-select-double (event)
+  "Select and focus the sidebar entry double-clicked by mouse EVENT."
+  (interactive "e")
+  (agent-shell-hq-toggle-mouse-select event)
+  (agent-shell-hq-toggle-select))
 
 ;;;; Rendering
 
@@ -110,17 +146,16 @@ Intentionally dim — just enough to show position without glare.")
                 (let* ((state (agent-shell-hq-peek--buffer-state buf))
                        (icon  (agent-shell-hq-peek--svg-icon state))
                        (bname (buffer-name buf)))
-                  (let ((label (agent-shell-hq-label-get buf)))
-                    (push (list :type 'buffer :buffer buf :root root)
-                          agent-shell-hq-toggle--entries)
-                    (insert (propertize
-                             (concat "    "
-                                     (propertize " " 'display icon)
-                                     " "
-                                     (or label bname)
-                                     "\n")
-                             'face 'default
-                             'agent-shell-hq-toggle-buffer buf))))))
+                  (push (list :type 'buffer :buffer buf :root root)
+                        agent-shell-hq-toggle--entries)
+                  (insert (propertize
+                           (concat "    "
+                                   (propertize " " 'display icon)
+                                   " "
+                                   bname
+                                   "\n")
+                           'face 'default
+                           'agent-shell-hq-toggle-buffer buf)))))
             (insert "\n")))
         (setq agent-shell-hq-toggle--entries
               (nreverse agent-shell-hq-toggle--entries))
@@ -235,23 +270,13 @@ On a project header: toggle collapse."
         (agent-shell-hq-toggle--highlight new-idx)))))
 
 (defun agent-shell-hq-toggle-label-current ()
-  "Generate a session label for the highlighted buffer entry."
+  "Send a rename prompt for the highlighted buffer entry."
   (interactive)
   (when-let* ((entry     (nth agent-shell-hq-toggle--current-idx
                               agent-shell-hq-toggle--entries))
               ((eq (plist-get entry :type) 'buffer))
               (shell-buf (plist-get entry :buffer)))
-    (message "Labelling %s…" (buffer-name shell-buf))
-    (agent-shell-hq-label-generate
-     shell-buf
-     (lambda (label)
-       (if label
-           (progn
-             (agent-shell-hq-label-set shell-buf label)
-             (when (get-buffer-window agent-shell-hq-toggle--sidebar-name)
-               (agent-shell-hq-toggle-refresh))
-             (message "Label: %s" label))
-         (message "Could not generate label for %s" (buffer-name shell-buf)))))))
+    (agent-shell-hq-label shell-buf)))
 
 (defun agent-shell-hq-toggle-refresh ()
   "Re-render the sidebar to pick up new or killed agent-shell buffers."
