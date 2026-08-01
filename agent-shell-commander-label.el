@@ -72,43 +72,69 @@ Reply with ONLY the summary — no punctuation, no quotes, no trailing period.\n
         (car (shell-maker-history))
       (error nil))))
 
-;;;; Hidden-shell approach (default)
+;;;; Anthropic availability check
+
+(defun agent-shell-commander-label--anthropic-available-p ()
+  "Return non-nil if an Anthropic API key is resolvable."
+  (and (fboundp 'agent-shell-anthropic-key)
+       (stringp (ignore-errors (agent-shell-anthropic-key)))))
+
+;;;; Hidden-shell approach (default, with Anthropic fallback)
 
 (defun agent-shell-commander-label--via-shell (shell-buf callback)
   "Label SHELL-BUF by spinning up a hidden temp session with its own config.
-Calls CALLBACK with the label string or nil."
-  (let* ((config  (with-current-buffer shell-buf (shell-maker-local-config)))
-         (first   (agent-shell-commander-label--first-exchange shell-buf)))
+If the hidden shell fails (common with ACP-based backends like Claude CLI),
+falls back to `agent-shell-commander-label--via-anthropic' when Anthropic
+auth is available.  Calls CALLBACK with the label string or nil."
+  (let* ((config (condition-case nil
+                     (with-current-buffer shell-buf (shell-maker-local-config))
+                   (error nil)))
+         (first  (agent-shell-commander-label--first-exchange shell-buf)))
     (unless first
       (funcall callback nil)
       (cl-return-from agent-shell-commander-label--via-shell))
-    (let* ((prompt   (agent-shell-commander-label--build-prompt first))
-           (tmp-name (format " *asc-label:%s*" (buffer-name shell-buf)))
-           (tmp-buf  (get-buffer-create tmp-name)))
-      (with-current-buffer tmp-buf
-        (shell-maker-start config t nil t tmp-name))
-      ;; Delay so the backend process has time to initialise.
-      (run-with-timer
-       agent-shell-commander-label-shell-delay nil
-       (lambda ()
-         (if (not (buffer-live-p tmp-buf))
-             (funcall callback nil)
-           (with-current-buffer tmp-buf
-             (condition-case err
-                 (shell-maker-submit
-                  :input prompt
-                  :on-finished
-                  (lambda (_input output success)
-                    (let ((label (when success
-                                   (agent-shell-commander-label--clean output))))
+    (if (null config)
+        ;; No shell-maker config — go straight to fallback
+        (agent-shell-commander-label--shell-fallback shell-buf callback)
+      (let* ((prompt   (agent-shell-commander-label--build-prompt first))
+             (tmp-name (format " *asc-label:%s*" (buffer-name shell-buf)))
+             (tmp-buf  (get-buffer-create tmp-name)))
+        (condition-case nil
+            (with-current-buffer tmp-buf
+              (shell-maker-start config t nil t tmp-name))
+          (error
+           (when (buffer-live-p tmp-buf) (kill-buffer tmp-buf))
+           (agent-shell-commander-label--shell-fallback shell-buf callback)
+           (cl-return-from agent-shell-commander-label--via-shell)))
+        (run-with-timer
+         agent-shell-commander-label-shell-delay nil
+         (lambda ()
+           (if (not (buffer-live-p tmp-buf))
+               (agent-shell-commander-label--shell-fallback shell-buf callback)
+             (with-current-buffer tmp-buf
+               (condition-case nil
+                   (shell-maker-submit
+                    :input prompt
+                    :on-finished
+                    (lambda (_input output success)
                       (when (buffer-live-p tmp-buf)
                         (kill-buffer tmp-buf))
-                      (funcall callback label))))
-               (error
-                (when (buffer-live-p tmp-buf)
-                  (kill-buffer tmp-buf))
-                (message "agent-shell-commander-label: shell error: %s" err)
-                (funcall callback nil))))))))))
+                      (if (and success output)
+                          (funcall callback (agent-shell-commander-label--clean output))
+                        (agent-shell-commander-label--shell-fallback shell-buf callback))))
+                 (error
+                  (when (buffer-live-p tmp-buf) (kill-buffer tmp-buf))
+                  (agent-shell-commander-label--shell-fallback shell-buf callback)))))))))))
+
+(defun agent-shell-commander-label--shell-fallback (shell-buf callback)
+  "Fallback: try Anthropic direct if available, otherwise give up."
+  (if (agent-shell-commander-label--anthropic-available-p)
+      (progn
+        (message "agent-shell-commander-label: hidden shell unavailable, trying Anthropic REST…")
+        (agent-shell-commander-label--via-anthropic shell-buf callback))
+    (message "agent-shell-commander-label: could not label — \
+set agent-shell-commander-label-use-anthropic t for Anthropic sessions")
+    (funcall callback nil))))
 
 ;;;; Anthropic direct approach
 
