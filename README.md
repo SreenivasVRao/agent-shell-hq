@@ -43,7 +43,32 @@ Mouse clicks and double-clicks are also supported.
 
 ### Label
 
-`M-x agent-shell-hq-label` asks the active agent to rename its own buffer to a concise, descriptive title. The agent calls back via `emacsclient` and the sidebar refreshes automatically.
+`M-x agent-shell-hq-label` titles the current session. It takes the most
+recent `agent-shell-hq-label-context-chars` characters of the buffer (the
+tail, not the head — the start of every buffer is a fixed welcome banner
+that's identical across sessions and would otherwise dominate the context),
+sends them to an external CLI as a prompt, and renames the buffer to
+whatever the CLI prints back.
+
+The rename itself goes through `shell-maker-set-buffer-name` rather than
+plain `rename-buffer`, since `agent-shell`/`shell-maker` resolve the
+buffer's underlying process by name — renaming any other way would detach
+it. Any paired viewport buffer is renamed to match, and the sidebar
+refreshes automatically afterward.
+
+The titling command is fully configurable — any CLI that reads a prompt as
+its last argument works:
+
+```elisp
+;; default
+(setq agent-shell-hq-label-command '("claude" "-p" "--model" "haiku"))
+
+;; llm (https://llm.datasette.io)
+(setq agent-shell-hq-label-command '("llm"))
+
+;; ollama
+(setq agent-shell-hq-label-command '("ollama" "run" "llama3.2"))
+```
 
 ## Requirements
 
@@ -104,4 +129,15 @@ In `config.el`:
   (agent-shell-hq-peek-height 60)
   :bind
   ("C-c a p" . agent-shell-hq-peek))
+
+(use-package! agent-shell-hq-label
+  :commands agent-shell-hq-label
+  :custom
+  ;; CLI command that receives the prompt as its final argument
+  (agent-shell-hq-label-command '("claude" "-p" "--model" "haiku"))
+  ;; Characters of buffer content (from the end) used as context for the title
+  (agent-shell-hq-label-context-chars 2000)
+  ;; Prompt template sent to the command (%s = buffer context)
+  (agent-shell-hq-label-prompt
+   "Reply with ONLY a terse 8-10 word title for this conversation, lowercase, no punctuation:\n\n%s"))
 ```
