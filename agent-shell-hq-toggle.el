@@ -475,9 +475,8 @@ Sidebar keys:
   (if (string= (safe-persp-name (get-current-persp))
                agent-shell-hq-toggle--persp-name)
       (let ((prev agent-shell-hq-toggle--prev-persp))
-        (agent-shell-hq-toggle--teardown)
-        (when prev
-          (persp-switch prev)))
+        (when prev (persp-switch prev))
+        (agent-shell-hq-toggle--teardown))
     (setq agent-shell-hq-toggle--prev-persp
           (safe-persp-name (get-current-persp)))
     (persp-switch agent-shell-hq-toggle--persp-name)
