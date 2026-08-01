@@ -117,12 +117,12 @@ Uses the existing viewport buffer when one already exists, so its mode
 ;;;; SVG status icons
 
 (defun agent-shell-commander-peek--svg-icon (state)
-  "Return a 14×14 SVG image for STATE (`busy', `idle', or `dead')."
-  (let* ((size 14)
+  "Return a 20×20 SVG image for STATE (`busy', `idle', or `dead')."
+  (let* ((size 20)
          (svg  (svg-create size size))
          (cx   (/ size 2.0))
          (cy   (/ size 2.0))
-         (r    5.5))
+         (r    8.5))
     (pcase state
       ('busy
        ;; Solid yellow circle — processing
@@ -134,18 +134,18 @@ Uses the existing viewport buffer when one already exists, so its mode
        (svg-circle svg cx cy r
                    :fill (face-foreground 'success nil t)
                    :stroke "none")
-       (svg-polyline svg (list (cons 3.0 7.0)
-                               (cons 5.5 9.5)
-                               (cons 11.0 3.5))
+       (svg-polyline svg (list (cons 4.5  10.5)
+                               (cons 8.5  14.5)
+                               (cons 16.0  5.5))
                      :stroke "white"
-                     :stroke-width 1.8
+                     :stroke-width 2.5
                      :fill "none"
                      :stroke-linecap "round"
                      :stroke-linejoin "round"))
       ('dead
-       (svg-rectangle svg (- cx 4) (- cy 1) 8 2
+       (svg-rectangle svg 3.0 8.5 14.0 3.0
                       :fill (face-foreground 'shadow nil t)
-                      :rx 1)))
+                      :rx 1.5)))
     (svg-image svg :ascent 'center)))
 
 (defun agent-shell-commander-peek--buffer-state (buf)
