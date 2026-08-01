@@ -46,6 +46,12 @@
 (defvar agent-shell-hq-toggle--main-window nil
   "The main content window in the toggle workspace.")
 
+(defvar agent-shell-hq-toggle--refresh-timer nil
+  "Repeating timer that auto-refreshes the sidebar when buffer states change.")
+
+(defvar agent-shell-hq-toggle--state-snapshot nil
+  "Alist of (buffer . state) captured at last render, used to detect state changes.")
+
 ;;;; Faces
 
 (defface agent-shell-hq-toggle-project
@@ -116,6 +122,50 @@ Intentionally dim — just enough to show position without glare.")
   (agent-shell-hq-toggle-mouse-select event)
   (agent-shell-hq-toggle-select))
 
+;;;; Auto-refresh helpers
+
+(defun agent-shell-hq-toggle--capture-states ()
+  "Return alist of (buffer . state), sorted by buffer name for stable comparison.
+Sorting by name rather than using the raw MRU order from `agent-shell-buffers'
+prevents false positives in `agent-shell-hq-toggle--maybe-refresh': buffer
+accesses change MRU order but not actual busy/idle/dead state."
+  (sort (mapcar (lambda (buf)
+                  (cons buf (agent-shell-hq-peek--buffer-state buf)))
+                (agent-shell-buffers))
+        (lambda (a b) (string< (buffer-name (car a)) (buffer-name (car b))))))
+
+(defun agent-shell-hq-toggle--maybe-refresh ()
+  "Re-render the sidebar only when at least one buffer state has changed."
+  (when (get-buffer agent-shell-hq-toggle--sidebar-name)
+    (let ((current (agent-shell-hq-toggle--capture-states)))
+      (unless (equal current agent-shell-hq-toggle--state-snapshot)
+        (setq agent-shell-hq-toggle--state-snapshot current)
+        (let ((buf (agent-shell-hq-toggle--current-buffer)))
+          (agent-shell-hq-toggle--render)
+          (agent-shell-hq-toggle--restore-idx buf)
+          (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx))))))
+
+;;;; Cursor helpers
+
+(defun agent-shell-hq-toggle--current-buffer ()
+  "Return the buffer object for the currently highlighted entry, or nil."
+  (when-let ((entry (nth agent-shell-hq-toggle--current-idx
+                         agent-shell-hq-toggle--entries)))
+    (plist-get entry :buffer)))
+
+(defun agent-shell-hq-toggle--restore-idx (buf)
+  "After a re-render, set `agent-shell-hq-toggle--current-idx' to BUF.
+If BUF is live and still in the entries list, move to its new position.
+Otherwise clamp the old index to the new list length."
+  (setq agent-shell-hq-toggle--current-idx
+        (or (and (buffer-live-p buf)
+                 (cl-position-if (lambda (e)
+                                   (and (eq (plist-get e :type) 'buffer)
+                                        (eq (plist-get e :buffer) buf)))
+                                 agent-shell-hq-toggle--entries))
+            (min agent-shell-hq-toggle--current-idx
+                 (max 0 (1- (length agent-shell-hq-toggle--entries)))))))
+
 ;;;; Rendering
 
 (defun agent-shell-hq-toggle--render ()
@@ -160,7 +210,9 @@ Intentionally dim — just enough to show position without glare.")
               (nreverse agent-shell-hq-toggle--entries))
         (setq buffer-read-only t)
         (setq-local cursor-type nil))
-      (use-local-map agent-shell-hq-toggle-map))))
+      (use-local-map agent-shell-hq-toggle-map))
+    (setq agent-shell-hq-toggle--state-snapshot
+          (agent-shell-hq-toggle--capture-states))))
 
 ;;;; Highlight + point sync
 
@@ -280,12 +332,11 @@ On a project header: toggle collapse."
 (defun agent-shell-hq-toggle-refresh ()
   "Re-render the sidebar to pick up new or killed agent-shell buffers."
   (interactive)
-  (agent-shell-hq-toggle--render)
-  (setq agent-shell-hq-toggle--current-idx
-        (min agent-shell-hq-toggle--current-idx
-             (max 0 (1- (length agent-shell-hq-toggle--entries)))))
-  (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
-  (agent-shell-hq-toggle--preview-current))
+  (let ((buf (agent-shell-hq-toggle--current-buffer)))
+    (agent-shell-hq-toggle--render)
+    (agent-shell-hq-toggle--restore-idx buf)
+    (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
+    (agent-shell-hq-toggle--preview-current)))
 
 (defun agent-shell-hq-toggle-new-shell ()
   "Launch a new agent-shell and show it in the main window."
@@ -337,17 +388,23 @@ On a project header: toggle collapse."
   (agent-shell-hq-toggle--render)
   (agent-shell-hq-toggle--highlight 0)
   (agent-shell-hq-toggle--preview-current)
-  (select-window (get-buffer-window agent-shell-hq-toggle--sidebar-name)))
+  (select-window (get-buffer-window agent-shell-hq-toggle--sidebar-name))
+  (setq agent-shell-hq-toggle--refresh-timer
+        (run-with-timer 2 2 #'agent-shell-hq-toggle--maybe-refresh)))
 
 (defun agent-shell-hq-toggle--teardown ()
   "Clean up sidebar window and state."
+  (when agent-shell-hq-toggle--refresh-timer
+    (cancel-timer agent-shell-hq-toggle--refresh-timer)
+    (setq agent-shell-hq-toggle--refresh-timer nil))
   (when-let ((sidebar-win (get-buffer-window agent-shell-hq-toggle--sidebar-name)))
     (delete-window sidebar-win))
-  (setq agent-shell-hq-toggle--prev-persp    nil
-        agent-shell-hq-toggle--entries       nil
-        agent-shell-hq-toggle--current-idx   0
-        agent-shell-hq-toggle--collapsed     nil
-        agent-shell-hq-toggle--main-window   nil))
+  (setq agent-shell-hq-toggle--prev-persp      nil
+        agent-shell-hq-toggle--entries         nil
+        agent-shell-hq-toggle--current-idx     0
+        agent-shell-hq-toggle--collapsed       nil
+        agent-shell-hq-toggle--main-window     nil
+        agent-shell-hq-toggle--state-snapshot  nil))
 
 ;;;; Entry point
 
