@@ -10,6 +10,7 @@
 (require 'agent-shell)
 (require 'agent-shell-viewport)
 (require 'agent-shell-commander-peek)
+(require 'agent-shell-commander-label)
 (require 'persp-mode)
 (require 'transient)
 
@@ -63,6 +64,7 @@
     (define-key map (kbd "RET") #'agent-shell-commander-toggle-select)
     (define-key map (kbd "TAB") #'agent-shell-commander-toggle-collapse)
     (define-key map (kbd "g")   #'agent-shell-commander-toggle-refresh)
+    (define-key map (kbd "r")   #'agent-shell-commander-toggle-label-current)
     (define-key map (kbd "s")   #'agent-shell-commander-toggle-new-shell)
     (define-key map (kbd "q")   #'agent-shell-commander-toggle)
     (define-key map (kbd "C-g") #'agent-shell-commander-toggle)
@@ -99,16 +101,17 @@
                 (let* ((state (agent-shell-commander-peek--buffer-state buf))
                        (icon  (agent-shell-commander-peek--svg-icon state))
                        (bname (buffer-name buf)))
-                  (push (list :type 'buffer :buffer buf :root root)
-                        agent-shell-commander-toggle--entries)
-                  (insert (propertize
-                           (concat "    "
-                                   (propertize " " 'display icon)
-                                   " "
-                                   bname
-                                   "\n")
-                           'face 'default
-                           'agent-shell-commander-toggle-buffer buf)))))
+                  (let ((label (agent-shell-commander-label-get buf)))
+                    (push (list :type 'buffer :buffer buf :root root)
+                          agent-shell-commander-toggle--entries)
+                    (insert (propertize
+                             (concat "    "
+                                     (propertize " " 'display icon)
+                                     " "
+                                     (or label bname)
+                                     "\n")
+                             'face 'default
+                             'agent-shell-commander-toggle-buffer buf)))))
             (insert "\n")))
         (setq agent-shell-commander-toggle--entries
               (nreverse agent-shell-commander-toggle--entries))
@@ -222,6 +225,25 @@ On a project header: toggle collapse."
         (setq agent-shell-commander-toggle--current-idx new-idx)
         (agent-shell-commander-toggle--highlight new-idx)))))
 
+(defun agent-shell-commander-toggle-label-current ()
+  "Generate a session label for the highlighted buffer entry."
+  (interactive)
+  (when-let* ((entry     (nth agent-shell-commander-toggle--current-idx
+                              agent-shell-commander-toggle--entries))
+              ((eq (plist-get entry :type) 'buffer))
+              (shell-buf (plist-get entry :buffer)))
+    (message "Labelling %s…" (buffer-name shell-buf))
+    (agent-shell-commander-label-generate
+     shell-buf
+     (lambda (label)
+       (if label
+           (progn
+             (agent-shell-commander-label-set shell-buf label)
+             (when (get-buffer-window agent-shell-commander-toggle--sidebar-name)
+               (agent-shell-commander-toggle-refresh))
+             (message "Label: %s" label))
+         (message "Could not generate label for %s" (buffer-name shell-buf)))))))
+
 (defun agent-shell-commander-toggle-refresh ()
   "Re-render the sidebar to pick up new or killed agent-shell buffers."
   (interactive)
@@ -252,6 +274,7 @@ On a project header: toggle collapse."
    ["Actions"
     ("RET" "select / collapse" agent-shell-commander-toggle-select)
     ("TAB" "collapse / expand" agent-shell-commander-toggle-collapse)
+    ("r"   "label session"     agent-shell-commander-toggle-label-current)
     ("g"   "refresh list"      agent-shell-commander-toggle-refresh)
     ("s"   "new shell"         agent-shell-commander-toggle-new-shell)]
    ["Quit"
