@@ -1,0 +1,353 @@
+;;; agent-shell-hq-peek.el --- Posframe buffer switcher for agent-shell  -*- lexical-binding: t -*-
+
+;; Copyright (C) 2024
+
+;; Author: Sreenivas Venkobarao
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.66.1") (posframe "1.4"))
+
+;;; Code:
+
+(require 'agent-shell)
+(require 'agent-shell-viewport)
+(require 'posframe)
+
+;;;; Customization
+
+(defgroup agent-shell-hq-peek nil
+  "Posframe buffer switcher for agent-shell."
+  :group 'agent-shell
+  :prefix "agent-shell-hq-peek-")
+
+(defcustom agent-shell-hq-peek-position 'right
+  "Edge of the frame where the peek posframe is anchored.
+One of `top', `bottom', `left', `right'."
+  :type '(choice (const top) (const bottom) (const left) (const right)))
+
+(defcustom agent-shell-hq-peek-width 52
+  "Width of the peek posframe in columns."
+  :type 'integer)
+
+(defcustom agent-shell-hq-peek-height 60
+  "Maximum height of the peek posframe in rows."
+  :type 'integer)
+
+;;;; Faces
+
+(defface agent-shell-hq-peek-project
+  '((t :inherit font-lock-keyword-face :weight bold))
+  "Face for project group headers in the peek posframe.")
+
+;;;; Internal state
+
+(defconst agent-shell-hq-peek--buffer-name " *agent-shell-hq-peek*")
+
+(defvar agent-shell-hq-peek--entries nil
+  "Flat list of selectable entries.  Each element: plist (:buffer SHELL-BUF).")
+
+(defvar agent-shell-hq-peek--current-idx 0
+  "Index into `agent-shell-hq-peek--entries' of the highlighted entry.")
+
+(defvar agent-shell-hq-peek--origin-window nil
+  "Window that was selected when peek was invoked.")
+
+(defvar agent-shell-hq-peek--origin-buffer nil
+  "Buffer displayed in the origin window when peek was invoked (restored on quit).")
+
+(defvar agent-shell-hq-peek--saved-terminal-map nil
+  "Saved `overriding-terminal-local-map' value, restored when peek is dismissed.")
+
+;; Minimal override map — only C-g, so normal editing is unaffected in the
+;; parent frame. `overriding-terminal-local-map' has the highest priority and
+;; fires before the child-frame keymap lookup, making C-g reliable regardless
+;; of which frame currently has focus.
+(defvar agent-shell-hq-peek--quit-override-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-g") #'agent-shell-hq-peek-quit)
+    map)
+  "Terminal-wide override map active while the peek posframe is shown.")
+
+;;;; Keymap
+
+(defvar agent-shell-hq-peek-map
+  (let ((map (make-sparse-keymap)))
+    (suppress-keymap map t)
+    (define-key map (kbd "n")   #'agent-shell-hq-peek-next)
+    (define-key map (kbd "j")   #'agent-shell-hq-peek-next)
+    (define-key map (kbd "p")   #'agent-shell-hq-peek-prev)
+    (define-key map (kbd "k")   #'agent-shell-hq-peek-prev)
+    (define-key map (kbd "RET") #'agent-shell-hq-peek-select)
+    (define-key map (kbd "g")   #'agent-shell-hq-peek-quit)
+    (define-key map (kbd "q")   #'agent-shell-hq-peek-quit)
+    (define-key map (kbd "C-g") #'agent-shell-hq-peek-quit)
+    (define-key map (kbd "s")   #'agent-shell-hq-peek-new-shell)
+    map)
+  "Keymap active inside the agent-shell-hq peek posframe.")
+
+;;;; Override map helpers
+
+(defun agent-shell-hq-peek--clear-override ()
+  "Restore `overriding-terminal-local-map' to its pre-peek value."
+  (when (eq overriding-terminal-local-map agent-shell-hq-peek--quit-override-map)
+    (setq overriding-terminal-local-map agent-shell-hq-peek--saved-terminal-map))
+  (setq agent-shell-hq-peek--saved-terminal-map nil))
+
+;;;; Preferred display buffer
+
+(defun agent-shell-hq-peek--preferred-buffer (shell-buf)
+  "Return the best buffer to display for SHELL-BUF.
+Uses the existing viewport buffer when one already exists, so its mode
+\(view or edit) is preserved.  Falls back to the shell buffer itself."
+  (or (ignore-errors
+        (agent-shell-viewport--buffer :shell-buffer shell-buf :existing-only t))
+      shell-buf))
+
+;;;; Preview
+
+(defun agent-shell-hq-peek--preview-current ()
+  "Show the highlighted buffer in the origin window (behind the posframe)."
+  (when-let* ((entry      (nth agent-shell-hq-peek--current-idx
+                               agent-shell-hq-peek--entries))
+              (shell-buf  (plist-get entry :buffer))
+              (display-buf (agent-shell-hq-peek--preferred-buffer shell-buf)))
+    (when (and (window-live-p agent-shell-hq-peek--origin-window)
+               (buffer-live-p display-buf))
+      (set-window-buffer agent-shell-hq-peek--origin-window display-buf))))
+
+;;;; SVG icon files
+
+(defvar agent-shell-hq-peek--icon-dir
+  (expand-file-name "icons"
+                    (file-name-directory (or load-file-name
+                                             (buffer-file-name)
+                                             default-directory)))
+  "Directory containing the SVG icon files.")
+
+(defvar agent-shell-hq-peek--icon-cache nil
+  "Alist of (STATE . IMAGE) loaded from `agent-shell-hq-peek--icon-dir'.")
+
+(defun agent-shell-hq-peek--load-icons ()
+  "Load SVG icon files from disk into `agent-shell-hq-peek--icon-cache'."
+  (setq agent-shell-hq-peek--icon-cache
+        (mapcar (lambda (state)
+                  (let ((path (expand-file-name (format "%s.svg" state)
+                                                agent-shell-hq-peek--icon-dir)))
+                    (cons state (create-image path 'svg nil :ascent 'center))))
+                '(idle busy dead))))
+
+(defun agent-shell-hq-peek--svg-icon (state)
+  "Return the cached SVG image for STATE (`busy', `idle', or `dead')."
+  (unless agent-shell-hq-peek--icon-cache
+    (agent-shell-hq-peek--load-icons))
+  (alist-get state agent-shell-hq-peek--icon-cache))
+
+(defun agent-shell-hq-peek--buffer-state (buf)
+  "Return `busy', `idle', or `dead' for BUF."
+  (if (buffer-live-p buf)
+      (with-current-buffer buf
+        (if (shell-maker-busy) 'busy 'idle))
+    'dead))
+
+;;;; Buffer grouping
+
+(defun agent-shell-hq-peek--grouped-buffers (current-root)
+  "Return list of (root project-name buffers) groups.
+Group matching CURRENT-ROOT is placed first; others alphabetical."
+  (let ((table (make-hash-table :test 'equal))
+        (order nil))
+    (dolist (buf (agent-shell-buffers))
+      (let* ((root  (with-current-buffer buf (agent-shell-cwd)))
+             (pname (with-current-buffer buf (agent-shell--project-name))))
+        (unless (gethash root table)
+          (puthash root (list pname nil) table)
+          (push root order))
+        (let ((entry (gethash root table)))
+          (setcar (cdr entry) (append (cadr entry) (list buf))))))
+    (let* ((groups (mapcar (lambda (root)
+                             (let ((e (gethash root table)))
+                               (list root (car e) (cadr e))))
+                           (nreverse order)))
+           (current (seq-filter (lambda (g) (equal (car g) current-root)) groups))
+           (rest    (seq-filter (lambda (g) (not (equal (car g) current-root))) groups)))
+      (append current
+              (sort rest (lambda (a b) (string< (cadr a) (cadr b))))))))
+
+;;;; Rendering
+
+(defun agent-shell-hq-peek--render (groups)
+  "Render GROUPS into the peek buffer."
+  (with-current-buffer (get-buffer-create agent-shell-hq-peek--buffer-name)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (setq agent-shell-hq-peek--entries nil)
+      (insert "\n")
+      (dolist (group groups)
+        (let ((pname (cadr  group))
+              (bufs  (caddr group)))
+          (insert (propertize (concat "    " pname "\n")
+                              'face 'agent-shell-hq-peek-project
+                              'agent-shell-hq-peek-header t))
+          (dolist (buf bufs)
+            (let* ((state (agent-shell-hq-peek--buffer-state buf))
+                   (icon  (agent-shell-hq-peek--svg-icon state))
+                   (bname (buffer-name buf)))
+              (push (list :buffer buf) agent-shell-hq-peek--entries)
+              (insert (propertize
+                       (concat "      "
+                               (propertize " " 'display icon)
+                               " "
+                               bname
+                               "\n")
+                       'face 'default
+                       'agent-shell-hq-peek-buffer buf))))
+          (insert "\n")))
+      (insert (propertize "    n/p navigate   RET select   q quit\n" 'face 'shadow))
+      (insert "\n")
+      (setq agent-shell-hq-peek--entries (nreverse agent-shell-hq-peek--entries))
+      (setq buffer-read-only t))
+    (goto-char (point-min))))
+
+;;;; Highlight management
+
+(defun agent-shell-hq-peek--highlight-line (idx)
+  "Highlight the entry at IDX, clearing all others."
+  (with-current-buffer (get-buffer-create agent-shell-hq-peek--buffer-name)
+    (let ((inhibit-read-only t))
+      (save-excursion
+        (goto-char (point-min))
+        (while (not (eobp))
+          (when (get-text-property (point) 'agent-shell-hq-peek-buffer)
+            (put-text-property (point)
+                               (min (1+ (line-end-position)) (point-max))
+                               'face 'default))
+          (forward-line 1)))
+      (when-let* ((entry (nth idx agent-shell-hq-peek--entries))
+                  (buf   (plist-get entry :buffer))
+                  (pos   (text-property-any (point-min) (point-max)
+                                            'agent-shell-hq-peek-buffer buf)))
+        (put-text-property pos
+                           (min (1+ (save-excursion
+                                      (goto-char pos)
+                                      (line-end-position)))
+                                (point-max))
+                           'face 'highlight)))))
+
+;;;; Posframe position handler
+
+(defun agent-shell-hq-peek--poshandler (info)
+  "Anchor the posframe to `agent-shell-hq-peek-position'."
+  (let* ((fw  (plist-get info :parent-frame-width))
+         (fh  (plist-get info :parent-frame-height))
+         (pw  (plist-get info :posframe-width))
+         (ph  (plist-get info :posframe-height))
+         (pad 8))
+    (pcase agent-shell-hq-peek-position
+      ('right  (cons (- fw pw pad) pad))
+      ('left   (cons pad pad))
+      ('top    (cons (/ (- fw pw) 2) pad))
+      ('bottom (cons (/ (- fw pw) 2) (- fh ph pad))))))
+
+;;;; Commands
+
+(defun agent-shell-hq-peek-next ()
+  "Move highlight to the next entry and preview that buffer."
+  (interactive)
+  (when agent-shell-hq-peek--entries
+    (setq agent-shell-hq-peek--current-idx
+          (mod (1+ agent-shell-hq-peek--current-idx)
+               (length agent-shell-hq-peek--entries)))
+    (agent-shell-hq-peek--highlight-line agent-shell-hq-peek--current-idx)
+    (agent-shell-hq-peek--preview-current)))
+
+(defun agent-shell-hq-peek-prev ()
+  "Move highlight to the previous entry and preview that buffer."
+  (interactive)
+  (when agent-shell-hq-peek--entries
+    (setq agent-shell-hq-peek--current-idx
+          (mod (1- agent-shell-hq-peek--current-idx)
+               (length agent-shell-hq-peek--entries)))
+    (agent-shell-hq-peek--highlight-line agent-shell-hq-peek--current-idx)
+    (agent-shell-hq-peek--preview-current)))
+
+(defun agent-shell-hq-peek-select ()
+  "Confirm the highlighted buffer, switch to it, and dismiss the posframe."
+  (interactive)
+  (when-let* ((entry     (nth agent-shell-hq-peek--current-idx
+                              agent-shell-hq-peek--entries))
+              (shell-buf (plist-get entry :buffer))
+              (disp-buf  (agent-shell-hq-peek--preferred-buffer shell-buf)))
+    (let ((win agent-shell-hq-peek--origin-window))
+      (agent-shell-hq-peek--clear-override)
+      (posframe-delete agent-shell-hq-peek--buffer-name)
+      (when-let ((pb (get-buffer agent-shell-hq-peek--buffer-name)))
+        (kill-buffer pb))
+      (setq agent-shell-hq-peek--entries    nil
+            agent-shell-hq-peek--current-idx 0)
+      (when (and (window-live-p win) (buffer-live-p disp-buf))
+        (select-window win)
+        (switch-to-buffer disp-buf)))))
+
+(defun agent-shell-hq-peek-quit ()
+  "Dismiss the peek posframe and restore the original buffer."
+  (interactive)
+  (agent-shell-hq-peek--clear-override)
+  (let ((win      agent-shell-hq-peek--origin-window)
+        (orig-buf agent-shell-hq-peek--origin-buffer))
+    (posframe-delete agent-shell-hq-peek--buffer-name)
+    (when-let ((buf (get-buffer agent-shell-hq-peek--buffer-name)))
+      (kill-buffer buf))
+    (setq agent-shell-hq-peek--entries      nil
+          agent-shell-hq-peek--current-idx  0
+          agent-shell-hq-peek--origin-buffer nil)
+    (when (window-live-p win)
+      (select-window win)
+      (when (and (buffer-live-p orig-buf)
+                 (not (eq (window-buffer win) orig-buf)))
+        (set-window-buffer win orig-buf)))))
+
+(defun agent-shell-hq-peek-new-shell ()
+  "Launch a new agent-shell in the current project and dismiss peek."
+  (interactive)
+  (let ((win agent-shell-hq-peek--origin-window))
+    (agent-shell-hq-peek-quit)
+    (when (window-live-p win)
+      (select-window win)
+      (agent-shell-new-shell))))
+
+;;;; Entry point
+
+;;;###autoload
+(defun agent-shell-hq-peek ()
+  "Show a posframe listing all agent-shell buffers grouped by project.
+
+n/p navigates, RET selects, g/q/C-g quits."
+  (interactive)
+  (let* ((origin-win   (selected-window))
+         (current-root (ignore-errors (agent-shell-cwd)))
+         (groups       (agent-shell-hq-peek--grouped-buffers current-root)))
+    (unless groups
+      (user-error "No agent-shell buffers found"))
+    (setq agent-shell-hq-peek--origin-window origin-win
+          agent-shell-hq-peek--origin-buffer  (window-buffer origin-win)
+          agent-shell-hq-peek--current-idx   0)
+    (agent-shell-hq-peek--render groups)
+    (agent-shell-hq-peek--highlight-line 0)
+    (with-current-buffer agent-shell-hq-peek--buffer-name
+      (use-local-map agent-shell-hq-peek-map))
+    (setq agent-shell-hq-peek--saved-terminal-map overriding-terminal-local-map
+          overriding-terminal-local-map agent-shell-hq-peek--quit-override-map)
+    (posframe-show agent-shell-hq-peek--buffer-name
+                   :poshandler            #'agent-shell-hq-peek--poshandler
+                   :width                 agent-shell-hq-peek-width
+                   :max-height            agent-shell-hq-peek-height
+                   :internal-border-width 10
+                   :border-color          (face-foreground 'shadow nil t)
+                   :accept-focus          t)
+    (agent-shell-hq-peek--preview-current)
+    (let ((pf-frame (buffer-local-value 'posframe--frame
+                                        (get-buffer agent-shell-hq-peek--buffer-name))))
+      (when (framep pf-frame)
+        (select-frame-set-input-focus pf-frame)
+        (select-window (frame-selected-window pf-frame) t)))))
+
+(provide 'agent-shell-hq-peek)
+;;; agent-shell-hq-peek.el ends here
