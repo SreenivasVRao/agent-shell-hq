@@ -294,6 +294,10 @@ On a project header: toggle collapse."
 
 (defun agent-shell-hq-toggle--setup ()
   "Build the sidebar + main window layout."
+  (when (window-parameter (selected-window) 'window-side)
+    (let ((non-side (seq-find (lambda (w) (not (window-parameter w 'window-side)))
+                              (window-list))))
+      (when non-side (select-window non-side))))
   (delete-other-windows)
   (let ((sidebar-win
          (display-buffer-in-side-window
