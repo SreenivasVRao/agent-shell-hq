@@ -134,7 +134,7 @@ auth is available.  Calls CALLBACK with the label string or nil."
         (agent-shell-commander-label--via-anthropic shell-buf callback))
     (message "agent-shell-commander-label: could not label — \
 set agent-shell-commander-label-use-anthropic t for Anthropic sessions")
-    (funcall callback nil))))
+    (funcall callback nil)))
 
 ;;;; Anthropic direct approach
 
