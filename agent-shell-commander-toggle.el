@@ -79,6 +79,9 @@
       (let ((inhibit-read-only t))
         (erase-buffer)
         (setq agent-shell-commander-toggle--entries nil)
+        ;; Top heading
+        (insert (propertize " Agent Shell Commander\n"
+                            'face '(:inherit font-lock-function-name-face :weight bold)))
         (insert "\n")
         (dolist (group groups)
           (let* ((root      (car   group))
@@ -88,7 +91,7 @@
             ;; Project header — always a navigable entry
             (push (list :type 'project :root root) agent-shell-commander-toggle--entries)
             (insert (propertize
-                     (concat "  " (if collapsed "▸ " "▾ ") pname "\n")
+                     (concat " " (if collapsed "▸ " "▾ ") pname "\n")
                      'face 'agent-shell-commander-toggle-project
                      'agent-shell-commander-toggle-root root))
             (unless collapsed
@@ -99,7 +102,7 @@
                   (push (list :type 'buffer :buffer buf :root root)
                         agent-shell-commander-toggle--entries)
                   (insert (propertize
-                           (concat "      "
+                           (concat "    "
                                    (propertize " " 'display icon)
                                    " "
                                    bname
