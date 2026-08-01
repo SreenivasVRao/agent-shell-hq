@@ -66,7 +66,6 @@
     (define-key map (kbd "s")   #'agent-shell-commander-toggle-new-shell)
     (define-key map (kbd "q")   #'agent-shell-commander-toggle)
     (define-key map (kbd "C-g") #'agent-shell-commander-toggle)
-    (define-key map (kbd "?")   #'agent-shell-commander-toggle-help)
     map)
   "Keymap for the agent-shell-commander toggle sidebar.")
 
@@ -255,6 +254,10 @@ On a project header: toggle collapse."
    ["Quit"
     ("q"   "quit workspace"    agent-shell-commander-toggle)
     ("?"   "this help"         agent-shell-commander-toggle-help)]])
+
+;; Bound after the transient is defined so this top-level form always
+;; runs on reload (defvar only sets the keymap on first load).
+(define-key agent-shell-commander-toggle-map (kbd "?") #'agent-shell-commander-toggle-help)
 
 ;;;; Workspace setup / teardown
 
