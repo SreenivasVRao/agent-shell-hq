@@ -52,6 +52,14 @@
   '((t :inherit agent-shell-commander-peek-project))
   "Face for project headers in the toggle sidebar.")
 
+(defface agent-shell-commander-toggle-selection
+  '((((class color) (background dark))
+     :background "#2d3b2d" :extend t)
+    (((class color) (background light))
+     :background "#d4e4d4" :extend t))
+  "Face for the selected entry in the toggle sidebar.
+Intentionally dim — just enough to show position without glare.")
+
 ;;;; Keymap
 
 (defvar agent-shell-commander-toggle-map
@@ -149,7 +157,7 @@
         (put-text-property pos
                            (min (1+ (save-excursion (goto-char pos) (line-end-position)))
                                 (point-max))
-                           'face 'highlight)
+                           'face 'agent-shell-commander-toggle-selection)
         (goto-char pos)
         (when-let ((win (get-buffer-window (current-buffer))))
           (set-window-point win pos))))))

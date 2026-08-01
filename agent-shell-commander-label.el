@@ -79,45 +79,41 @@ Reply with ONLY the summary — no punctuation, no quotes, no trailing period.\n
 (defun agent-shell-commander-label--via-anthropic (shell-buf callback)
   "Label SHELL-BUF via a direct async call to the Anthropic messages API.
 Calls CALLBACK with the label string or nil."
-  (let ((first (agent-shell-commander-label--first-exchange shell-buf)))
-    (unless first
-      (funcall callback nil)
-      (cl-return-from agent-shell-commander-label--via-anthropic))
-    (let* ((api-key (condition-case err
-                        (agent-shell-commander-label--anthropic-key)
-                      (error
-                       (message "%s" (error-message-string err))
-                       (funcall callback nil)
-                       (cl-return-from agent-shell-commander-label--via-anthropic))))
-           (prompt  (agent-shell-commander-label--build-prompt first))
-           (payload (json-encode
-                     `(("model"      . ,agent-shell-commander-label-anthropic-model)
-                       ("max_tokens" . 30)
-                       ("messages"   . [((role . "user") (content . ,prompt))]))))
-           (url-request-method "POST")
-           (url-request-extra-headers
-            `(("Content-Type"      . "application/json")
-              ("x-api-key"         . ,api-key)
-              ("anthropic-version" . "2023-06-01")))
-           (url-request-data (encode-coding-string payload 'utf-8)))
-      (url-retrieve
-       "https://api.anthropic.com/v1/messages"
-       (lambda (status)
-         (let (label)
-           (unless (plist-get status :error)
-             (goto-char (point-min))
-             (when (re-search-forward "^$" nil t)
-               (condition-case nil
-                   (let* ((data    (json-parse-buffer :object-type 'alist))
-                          (content (alist-get 'content data))
-                          (text    (and (vectorp content)
-                                        (> (length content) 0)
-                                        (alist-get 'text (aref content 0)))))
-                     (setq label (agent-shell-commander-label--clean text)))
-                 (error nil))))
-           (kill-buffer (current-buffer))
-           (funcall callback label)))
-       nil t))))
+  (let ((first   (agent-shell-commander-label--first-exchange shell-buf))
+        (api-key (condition-case err
+                     (agent-shell-commander-label--anthropic-key)
+                   (error (message "%s" (error-message-string err)) nil))))
+    (if (not (and first api-key))
+        (funcall callback nil)
+      (let* ((prompt  (agent-shell-commander-label--build-prompt first))
+             (payload (json-encode
+                       `(("model"      . ,agent-shell-commander-label-anthropic-model)
+                         ("max_tokens" . 30)
+                         ("messages"   . [((role . "user") (content . ,prompt))]))))
+             (url-request-method "POST")
+             (url-request-extra-headers
+              `(("Content-Type"      . "application/json")
+                ("x-api-key"         . ,api-key)
+                ("anthropic-version" . "2023-06-01")))
+             (url-request-data (encode-coding-string payload 'utf-8)))
+        (url-retrieve
+         "https://api.anthropic.com/v1/messages"
+         (lambda (status)
+           (let (label)
+             (unless (plist-get status :error)
+               (goto-char (point-min))
+               (when (re-search-forward "^$" nil t)
+                 (condition-case nil
+                     (let* ((data    (json-parse-buffer :object-type 'alist))
+                            (content (alist-get 'content data))
+                            (text    (and (vectorp content)
+                                          (> (length content) 0)
+                                          (alist-get 'text (aref content 0)))))
+                       (setq label (agent-shell-commander-label--clean text)))
+                   (error nil))))
+             (kill-buffer (current-buffer))
+             (funcall callback label)))
+         nil t)))))
 
 ;;;; Public API
 
