@@ -9,6 +9,7 @@
 
 (require 'agent-shell)
 (require 'posframe)
+(require 'svg)
 
 ;;;; Customization
 
@@ -66,6 +67,46 @@ One of `top', `bottom', `left', `right'."
     map)
   "Keymap active inside the agent-shell-commander peek posframe.")
 
+;;;; SVG status icons
+
+(defun agent-shell-commander-peek--svg-icon (state)
+  "Return a 14×14 SVG image for STATE (`busy', `idle', or `dead')."
+  (let* ((size 14)
+         (svg  (svg-create size size))
+         (cx   (/ size 2.0))
+         (cy   (/ size 2.0))
+         (r    5.0))
+    (pcase state
+      ('busy
+       (svg-circle svg cx cy r
+                   :fill (face-foreground 'warning nil t)
+                   :stroke "none")
+       (svg-polygon svg (list (cons (- cx 3) (- cy 3.5))
+                              (cons (+ cx 3) (- cy 3.5))
+                              (cons cx cy))
+                    :fill (face-background 'default nil t))
+       (svg-polygon svg (list (cons cx cy)
+                              (cons (- cx 3) (+ cy 3.5))
+                              (cons (+ cx 3) (+ cy 3.5)))
+                    :fill (face-background 'default nil t)))
+      ('idle
+       (svg-circle svg cx cy r
+                   :fill "none"
+                   :stroke (face-foreground 'shadow nil t)
+                   :stroke-width 1.5))
+      ('dead
+       (svg-rectangle svg (- cx 4) (- cy 1) 8 2
+                      :fill (face-foreground 'shadow nil t)
+                      :rx 1)))
+    (svg-image svg :ascent 'center)))
+
+(defun agent-shell-commander-peek--buffer-state (buf)
+  "Return `busy', `idle', or `dead' for BUF."
+  (if (buffer-live-p buf)
+      (with-current-buffer buf
+        (if (shell-maker-busy) 'busy 'idle))
+    'dead))
+
 ;;;; Buffer grouping
 
 (defun agent-shell-commander-peek--grouped-buffers (current-root)
@@ -106,10 +147,16 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
                               'face 'agent-shell-commander-peek-project
                               'agent-shell-commander-peek-header t))
           (dolist (buf bufs)
-            (let ((bname (buffer-name buf)))
+            (let* ((state (agent-shell-commander-peek--buffer-state buf))
+                   (icon  (agent-shell-commander-peek--svg-icon state))
+                   (bname (buffer-name buf)))
               (push (list :buffer buf) agent-shell-commander-peek--entries)
               (insert (propertize
-                       (concat "      ○ " bname "\n")
+                       (concat "      "
+                               (propertize " " 'display icon)
+                               " "
+                               bname
+                               "\n")
                        'face 'default
                        'agent-shell-commander-peek-buffer buf))))
           (insert "\n")))
