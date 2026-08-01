@@ -111,7 +111,7 @@
                                      (or label bname)
                                      "\n")
                              'face 'default
-                             'agent-shell-commander-toggle-buffer buf)))))
+                             'agent-shell-commander-toggle-buffer buf))))))
             (insert "\n")))
         (setq agent-shell-commander-toggle--entries
               (nreverse agent-shell-commander-toggle--entries))
