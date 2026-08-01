@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'agent-shell)
+(require 'agent-shell-viewport)
 (require 'posframe)
 (require 'svg)
 
@@ -50,6 +51,9 @@ One of `top', `bottom', `left', `right'."
 (defvar agent-shell-commander-peek--origin-window nil
   "Window that was selected when peek was invoked.")
 
+(defvar agent-shell-commander-peek--origin-buffer nil
+  "Buffer displayed in the origin window when peek was invoked (restored on quit).")
+
 ;;;; Keymap
 
 (defvar agent-shell-commander-peek-map
@@ -66,6 +70,28 @@ One of `top', `bottom', `left', `right'."
     (define-key map (kbd "s")   #'agent-shell-commander-peek-new-shell)
     map)
   "Keymap active inside the agent-shell-commander peek posframe.")
+
+;;;; Preferred display buffer
+
+(defun agent-shell-commander-peek--preferred-buffer (shell-buf)
+  "Return the best buffer to display for SHELL-BUF.
+Uses the existing viewport buffer when one already exists, so its mode
+\(view or edit) is preserved.  Falls back to the shell buffer itself."
+  (or (ignore-errors
+        (agent-shell-viewport--buffer :shell-buffer shell-buf :existing-only t))
+      shell-buf))
+
+;;;; Preview
+
+(defun agent-shell-commander-peek--preview-current ()
+  "Show the highlighted buffer in the origin window (behind the posframe)."
+  (when-let* ((entry      (nth agent-shell-commander-peek--current-idx
+                               agent-shell-commander-peek--entries))
+              (shell-buf  (plist-get entry :buffer))
+              (display-buf (agent-shell-commander-peek--preferred-buffer shell-buf)))
+    (when (and (window-live-p agent-shell-commander-peek--origin-window)
+               (buffer-live-p display-buf))
+      (set-window-buffer agent-shell-commander-peek--origin-window display-buf))))
 
 ;;;; SVG status icons
 
@@ -209,49 +235,58 @@ Group matching CURRENT-ROOT is placed first; others alphabetical."
 ;;;; Commands
 
 (defun agent-shell-commander-peek-next ()
-  "Move highlight to the next entry."
+  "Move highlight to the next entry and preview that buffer."
   (interactive)
   (when agent-shell-commander-peek--entries
     (setq agent-shell-commander-peek--current-idx
           (mod (1+ agent-shell-commander-peek--current-idx)
                (length agent-shell-commander-peek--entries)))
-    (agent-shell-commander-peek--highlight-line agent-shell-commander-peek--current-idx)))
+    (agent-shell-commander-peek--highlight-line agent-shell-commander-peek--current-idx)
+    (agent-shell-commander-peek--preview-current)))
 
 (defun agent-shell-commander-peek-prev ()
-  "Move highlight to the previous entry."
+  "Move highlight to the previous entry and preview that buffer."
   (interactive)
   (when agent-shell-commander-peek--entries
     (setq agent-shell-commander-peek--current-idx
           (mod (1- agent-shell-commander-peek--current-idx)
                (length agent-shell-commander-peek--entries)))
-    (agent-shell-commander-peek--highlight-line agent-shell-commander-peek--current-idx)))
+    (agent-shell-commander-peek--highlight-line agent-shell-commander-peek--current-idx)
+    (agent-shell-commander-peek--preview-current)))
 
 (defun agent-shell-commander-peek-select ()
-  "Switch to the highlighted buffer and dismiss the posframe."
+  "Confirm the highlighted buffer, switch to it, and dismiss the posframe."
   (interactive)
-  (when-let* ((entry (nth agent-shell-commander-peek--current-idx
-                          agent-shell-commander-peek--entries))
-              (buf   (plist-get entry :buffer)))
+  (when-let* ((entry     (nth agent-shell-commander-peek--current-idx
+                              agent-shell-commander-peek--entries))
+              (shell-buf (plist-get entry :buffer))
+              (disp-buf  (agent-shell-commander-peek--preferred-buffer shell-buf)))
     (let ((win agent-shell-commander-peek--origin-window))
       (posframe-delete agent-shell-commander-peek--buffer-name)
       (when-let ((pb (get-buffer agent-shell-commander-peek--buffer-name)))
         (kill-buffer pb))
       (setq agent-shell-commander-peek--entries    nil
             agent-shell-commander-peek--current-idx 0)
-      (when (and (window-live-p win) (buffer-live-p buf))
+      (when (and (window-live-p win) (buffer-live-p disp-buf))
         (select-window win)
-        (switch-to-buffer buf)))))
+        (switch-to-buffer disp-buf)))))
 
 (defun agent-shell-commander-peek-quit ()
-  "Dismiss the peek posframe."
+  "Dismiss the peek posframe and restore the original buffer."
   (interactive)
-  (posframe-delete agent-shell-commander-peek--buffer-name)
-  (when-let ((buf (get-buffer agent-shell-commander-peek--buffer-name)))
-    (kill-buffer buf))
-  (setq agent-shell-commander-peek--entries     nil
-        agent-shell-commander-peek--current-idx 0)
-  (when (window-live-p agent-shell-commander-peek--origin-window)
-    (select-window agent-shell-commander-peek--origin-window)))
+  (let ((win      agent-shell-commander-peek--origin-window)
+        (orig-buf agent-shell-commander-peek--origin-buffer))
+    (posframe-delete agent-shell-commander-peek--buffer-name)
+    (when-let ((buf (get-buffer agent-shell-commander-peek--buffer-name)))
+      (kill-buffer buf))
+    (setq agent-shell-commander-peek--entries      nil
+          agent-shell-commander-peek--current-idx  0
+          agent-shell-commander-peek--origin-buffer nil)
+    (when (window-live-p win)
+      (select-window win)
+      (when (and (buffer-live-p orig-buf)
+                 (not (eq (window-buffer win) orig-buf)))
+        (set-window-buffer win orig-buf)))))
 
 (defun agent-shell-commander-peek-new-shell ()
   "Launch a new agent-shell in the current project and dismiss peek."
@@ -276,6 +311,7 @@ n/p navigates, RET selects, g/q/C-g quits."
     (unless groups
       (user-error "No agent-shell buffers found"))
     (setq agent-shell-commander-peek--origin-window origin-win
+          agent-shell-commander-peek--origin-buffer  (window-buffer origin-win)
           agent-shell-commander-peek--current-idx   0)
     (agent-shell-commander-peek--render groups)
     (agent-shell-commander-peek--highlight-line 0)
@@ -288,6 +324,7 @@ n/p navigates, RET selects, g/q/C-g quits."
                    :internal-border-width 10
                    :border-color          (face-foreground 'shadow nil t)
                    :accept-focus          t)
+    (agent-shell-commander-peek--preview-current)
     (let ((pf-frame (buffer-local-value 'posframe--frame
                                         (get-buffer agent-shell-commander-peek--buffer-name))))
       (when (framep pf-frame)
