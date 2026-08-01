@@ -29,8 +29,11 @@
 (defvar agent-shell-commander-toggle--prev-persp nil
   "Perspective name to return to on toggle-off.")
 
+;; Each entry is a plist with :type ('project or 'buffer), :root ROOT,
+;; and for buffer entries, :buffer BUF.  Project headers are navigable
+;; entries so collapsed groups can be re-expanded via TAB.
 (defvar agent-shell-commander-toggle--entries nil
-  "Flat selectable entries: each a plist (:buffer SHELL-BUF :root ROOT).")
+  "Flat navigable entries including project headers and buffer lines.")
 
 (defvar agent-shell-commander-toggle--current-idx 0
   "Index of the highlighted entry.")
@@ -81,7 +84,8 @@
                  (pname     (cadr  group))
                  (bufs      (caddr group))
                  (collapsed (member root agent-shell-commander-toggle--collapsed)))
-            ;; project header with collapse indicator
+            ;; Project header — always a navigable entry
+            (push (list :type 'project :root root) agent-shell-commander-toggle--entries)
             (insert (propertize
                      (concat "  " (if collapsed "▸ " "▾ ") pname "\n")
                      'face 'agent-shell-commander-toggle-project
@@ -91,7 +95,7 @@
                 (let* ((state (agent-shell-commander-peek--buffer-state buf))
                        (icon  (agent-shell-commander-peek--svg-icon state))
                        (bname (buffer-name buf)))
-                  (push (list :buffer buf :root root)
+                  (push (list :type 'buffer :buffer buf :root root)
                         agent-shell-commander-toggle--entries)
                   (insert (propertize
                            (concat "      "
@@ -108,40 +112,54 @@
         (insert "\n")
         (setq agent-shell-commander-toggle--entries
               (nreverse agent-shell-commander-toggle--entries))
-        (setq buffer-read-only t))
+        (setq buffer-read-only t)
+        (setq-local cursor-type nil))
       (use-local-map agent-shell-commander-toggle-map))))
 
-;;;; Highlight
+;;;; Highlight + point sync
 
 (defun agent-shell-commander-toggle--highlight (idx)
-  "Highlight the entry at IDX, clearing all others."
+  "Highlight entry at IDX and sync point to that line in the sidebar window."
   (with-current-buffer (get-buffer-create agent-shell-commander-toggle--sidebar-name)
     (let ((inhibit-read-only t))
+      ;; Clear all entry highlights
       (save-excursion
         (goto-char (point-min))
         (while (not (eobp))
-          (when (get-text-property (point) 'agent-shell-commander-toggle-buffer)
-            (put-text-property (point)
-                               (min (1+ (line-end-position)) (point-max))
+          (cond
+           ((get-text-property (point) 'agent-shell-commander-toggle-buffer)
+            (put-text-property (point) (min (1+ (line-end-position)) (point-max))
                                'face 'default))
+           ((get-text-property (point) 'agent-shell-commander-toggle-root)
+            (put-text-property (point) (min (1+ (line-end-position)) (point-max))
+                               'face 'agent-shell-commander-toggle-project)))
           (forward-line 1)))
+      ;; Highlight and move to the selected entry
       (when-let* ((entry (nth idx agent-shell-commander-toggle--entries))
-                  (buf   (plist-get entry :buffer))
-                  (pos   (text-property-any (point-min) (point-max)
-                                            'agent-shell-commander-toggle-buffer buf)))
+                  (type  (plist-get entry :type))
+                  (pos   (if (eq type 'project)
+                             (text-property-any (point-min) (point-max)
+                                                'agent-shell-commander-toggle-root
+                                                (plist-get entry :root))
+                           (text-property-any (point-min) (point-max)
+                                              'agent-shell-commander-toggle-buffer
+                                              (plist-get entry :buffer)))))
         (put-text-property pos
-                           (min (1+ (save-excursion
-                                      (goto-char pos)
-                                      (line-end-position)))
+                           (min (1+ (save-excursion (goto-char pos) (line-end-position)))
                                 (point-max))
-                           'face 'highlight)))))
+                           'face 'highlight)
+        (goto-char pos)
+        (when-let ((win (get-buffer-window (current-buffer))))
+          (set-window-point win pos))))))
 
 ;;;; Preview
 
 (defun agent-shell-commander-toggle--preview-current ()
-  "Show the highlighted buffer in the main window."
+  "Show the highlighted buffer entry in the main window.
+No-ops when the highlighted entry is a project header."
   (when-let* ((entry     (nth agent-shell-commander-toggle--current-idx
                               agent-shell-commander-toggle--entries))
+              ((eq (plist-get entry :type) 'buffer))
               (shell-buf (plist-get entry :buffer))
               (disp-buf  (agent-shell-commander-peek--preferred-buffer shell-buf)))
     (when (and (window-live-p agent-shell-commander-toggle--main-window)
@@ -171,31 +189,38 @@
     (agent-shell-commander-toggle--preview-current)))
 
 (defun agent-shell-commander-toggle-select ()
-  "Move focus to the highlighted buffer in the main window."
+  "On a buffer entry: move focus to main window.
+On a project header: toggle collapse."
   (interactive)
-  (agent-shell-commander-toggle--preview-current)
-  (when (window-live-p agent-shell-commander-toggle--main-window)
-    (select-window agent-shell-commander-toggle--main-window)))
+  (when-let ((entry (nth agent-shell-commander-toggle--current-idx
+                         agent-shell-commander-toggle--entries)))
+    (if (eq (plist-get entry :type) 'project)
+        (agent-shell-commander-toggle-collapse)
+      (agent-shell-commander-toggle--preview-current)
+      (when (window-live-p agent-shell-commander-toggle--main-window)
+        (select-window agent-shell-commander-toggle--main-window)))))
 
 (defun agent-shell-commander-toggle-collapse ()
-  "Collapse or expand the project group at point or current entry's project."
+  "Toggle collapse of the current entry's project group."
   (interactive)
-  (let ((root (or (get-text-property (line-beginning-position)
-                                     'agent-shell-commander-toggle-root)
-                  (when-let ((entry (nth agent-shell-commander-toggle--current-idx
-                                         agent-shell-commander-toggle--entries)))
-                    (plist-get entry :root)))))
-    (when root
-      (if (member root agent-shell-commander-toggle--collapsed)
-          (setq agent-shell-commander-toggle--collapsed
-                (delete root agent-shell-commander-toggle--collapsed))
-        (push root agent-shell-commander-toggle--collapsed))
+  (when-let* ((entry (nth agent-shell-commander-toggle--current-idx
+                          agent-shell-commander-toggle--entries))
+              (root  (plist-get entry :root)))
+    (if (member root agent-shell-commander-toggle--collapsed)
+        (setq agent-shell-commander-toggle--collapsed
+              (delete root agent-shell-commander-toggle--collapsed))
+      (push root agent-shell-commander-toggle--collapsed))
+    ;; Preserve position on the same project header after re-render
+    (let ((saved-root root))
       (agent-shell-commander-toggle--render)
-      (setq agent-shell-commander-toggle--current-idx
-            (min agent-shell-commander-toggle--current-idx
-                 (max 0 (1- (length agent-shell-commander-toggle--entries)))))
-      (agent-shell-commander-toggle--highlight
-       agent-shell-commander-toggle--current-idx))))
+      (let ((new-idx (or (cl-position-if
+                          (lambda (e)
+                            (and (eq (plist-get e :type) 'project)
+                                 (equal (plist-get e :root) saved-root)))
+                          agent-shell-commander-toggle--entries)
+                         0)))
+        (setq agent-shell-commander-toggle--current-idx new-idx)
+        (agent-shell-commander-toggle--highlight new-idx)))))
 
 (defun agent-shell-commander-toggle-refresh ()
   "Re-render the sidebar to pick up new or killed agent-shell buffers."
@@ -217,7 +242,7 @@
       (select-window sidebar-win)
       (agent-shell-commander-toggle-refresh))))
 
-;;;; Workspace setup
+;;;; Workspace setup / teardown
 
 (defun agent-shell-commander-toggle--setup ()
   "Build the sidebar + main window layout."
@@ -260,7 +285,7 @@ perspective.
 
 Sidebar keys:
   n/p    navigate and preview
-  RET    move focus to main window
+  RET    select buffer / toggle project collapse
   TAB    collapse / expand project group
   g      refresh buffer list
   s      new agent-shell in current project
