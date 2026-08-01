@@ -106,10 +106,16 @@
                            'face 'default
                            'agent-shell-commander-toggle-buffer buf)))))
             (insert "\n")))
+        ;; Pad to push footer to the bottom of the visible window
+        (let* ((win         (get-buffer-window agent-shell-commander-toggle--sidebar-name))
+               (win-height  (if win (window-text-height win) 40))
+               (used-lines  (line-number-at-pos (point)))
+               (footer-lines 3)
+               (padding     (max 1 (- win-height used-lines footer-lines))))
+          (insert (make-string padding ?\n)))
         (insert (propertize "  n/p  navigate   RET  select\n" 'face 'shadow))
         (insert (propertize "  TAB  collapse     g  refresh\n" 'face 'shadow))
         (insert (propertize "    s  new shell     q  quit\n"   'face 'shadow))
-        (insert "\n")
         (setq agent-shell-commander-toggle--entries
               (nreverse agent-shell-commander-toggle--entries))
         (setq buffer-read-only t)
