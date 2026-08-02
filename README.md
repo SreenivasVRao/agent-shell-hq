@@ -7,7 +7,7 @@ An add-on to [agent-shell](https://github.com/xenodium/agent-shell) that provide
 
 ### HQ Toggle (heads-up display)
 
-![agent-shell-hq toggle sidebar](assets/toggle-sidebar.png)
+![agent-shell-hq toggle demo](assets/toggle-demo.gif)
 
 `M-x agent-shell-hq-toggle` opens a dedicated workspace with a sidebar listing all your agent-shell buffers grouped by project. Each buffer shows a live status icon (idle/busy/dead). Navigating the sidebar immediately previews the selected buffer in the main window.
 
