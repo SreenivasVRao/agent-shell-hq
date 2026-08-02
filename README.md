@@ -7,6 +7,8 @@ An add-on to [agent-shell](https://github.com/xenodium/agent-shell) that provide
 
 ### HQ Toggle (heads-up display)
 
+![agent-shell-hq toggle sidebar](assets/toggle-sidebar.png)
+
 `M-x agent-shell-hq-toggle` opens a dedicated workspace with a sidebar listing all your agent-shell buffers grouped by project. Each buffer shows a live status icon (idle/busy/dead). Navigating the sidebar immediately previews the selected buffer in the main window.
 
 Calling `agent-shell-hq-toggle` again returns you to your previous workspace.
@@ -28,6 +30,8 @@ Calling `agent-shell-hq-toggle` again returns you to your previous workspace.
 Mouse clicks and double-clicks are also supported.
 
 ### Peek
+
+![agent-shell-hq peek demo](assets/peek-demo.gif)
 
 `M-x agent-shell-hq-peek` overlays a posframe listing all agent-shell buffers without leaving your current state. As you navigate the list, the buffer behind the posframe updates live so you can glance at any session. Selecting a buffer switches to it; quitting restores your original buffer.
 
