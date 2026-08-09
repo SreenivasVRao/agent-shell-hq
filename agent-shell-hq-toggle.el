@@ -88,6 +88,8 @@ Intentionally dim — just enough to show position without glare.")
     (define-key map (kbd "RET")           #'agent-shell-hq-toggle-select)
     (define-key map (kbd "TAB")           #'agent-shell-hq-toggle-collapse)
     (define-key map (kbd "r")             #'agent-shell-hq-toggle-label-current)
+    (define-key map (kbd "R")             #'agent-shell-hq-toggle-label-all)
+    (define-key map (kbd "K")             #'agent-shell-hq-toggle-kill-current)
     (define-key map (kbd "g")             #'agent-shell-hq-toggle-refresh)
     (define-key map (kbd "s")             #'agent-shell-hq-toggle-new-shell)
     (define-key map (kbd "q")             #'agent-shell-hq-toggle)
@@ -375,6 +377,27 @@ On a project header: toggle collapse."
               (shell-buf (plist-get entry :buffer)))
     (agent-shell-hq-label shell-buf)))
 
+(defun agent-shell-hq-toggle-kill-current ()
+  "Kill the highlighted agent-shell session and its associated terminal buffer."
+  (interactive)
+  (when-let* ((entry     (nth agent-shell-hq-toggle--current-idx
+                              agent-shell-hq-toggle--entries))
+              ((eq (plist-get entry :type) 'buffer))
+              (shell-buf (plist-get entry :buffer)))
+    (let ((viewport-buf (agent-shell-hq-peek--preferred-buffer shell-buf)))
+      (when (and (buffer-live-p viewport-buf)
+                 (not (eq viewport-buf shell-buf)))
+        (kill-buffer viewport-buf))
+      (when (buffer-live-p shell-buf)
+        (kill-buffer shell-buf)))
+    (agent-shell-hq-toggle-refresh)))
+
+(defun agent-shell-hq-toggle-label-all ()
+  "Sequentially prompt to rename every agent-shell session."
+  (interactive)
+  (dolist (buf (agent-shell-buffers))
+    (agent-shell-hq-label buf)))
+
 (defun agent-shell-hq-toggle-refresh ()
   "Re-render the sidebar to pick up new or killed agent-shell buffers."
   (interactive)
@@ -389,8 +412,15 @@ On a project header: toggle collapse."
   "Launch a new agent-shell and show it in the main window."
   (interactive)
   (when (window-live-p agent-shell-hq-toggle--main-window)
-    (select-window agent-shell-hq-toggle--main-window)
-    (agent-shell-new-shell)
+    (let* ((before      (agent-shell-buffers))
+           (saved-wconf (current-window-configuration)))
+      (with-selected-window agent-shell-hq-toggle--main-window
+        (agent-shell-new-shell))
+      (set-window-configuration saved-wconf)
+      (when-let* ((after    (agent-shell-buffers))
+                  (new-buf  (seq-find (lambda (b) (not (memq b before))) after))
+                  ((buffer-live-p new-buf)))
+        (set-window-buffer agent-shell-hq-toggle--main-window new-buf)))
     (when-let ((sidebar-win (get-buffer-window agent-shell-hq-toggle--sidebar-name)))
       (select-window sidebar-win)
       (agent-shell-hq-toggle-refresh))))
@@ -406,6 +436,8 @@ On a project header: toggle collapse."
     ("RET" "select / collapse" agent-shell-hq-toggle-select)
     ("TAB" "collapse / expand" agent-shell-hq-toggle-collapse)
     ("r"   "label session"     agent-shell-hq-toggle-label-current)
+    ("R"   "label all sessions" agent-shell-hq-toggle-label-all)
+    ("K"   "kill session"      agent-shell-hq-toggle-kill-current)
     ("g"   "refresh list"      agent-shell-hq-toggle-refresh)
     ("s"   "new shell"         agent-shell-hq-toggle-new-shell)]
    ["Quit"
@@ -468,6 +500,9 @@ Sidebar keys:
   n/p    navigate and preview
   RET    select buffer / toggle project collapse
   TAB    collapse / expand project group
+  r      label current session
+  R      label all sessions
+  K      kill current session + terminal
   g      refresh buffer list
   s      new agent-shell in current project
   q      quit (return to previous perspective)"
