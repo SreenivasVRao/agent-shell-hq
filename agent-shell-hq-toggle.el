@@ -314,25 +314,39 @@ No-ops when the highlighted entry is a project header."
 
 ;;;; Commands
 
-(defun agent-shell-hq-toggle-next ()
-  "Move to the next entry and preview it."
-  (interactive)
+(defun agent-shell-hq-toggle--navigable-p (entry)
+  "Return non-nil when ENTRY should be reachable via n/p navigation.
+Buffer entries are always navigable.  Project headers are navigable only
+while their group is collapsed, since collapsing removes every buffer
+entry underneath them, leaving the header as the sole (and only)
+keyboard-reachable way to expand the group again."
+  (or (eq (plist-get entry :type) 'buffer)
+      (member (plist-get entry :root) agent-shell-hq-toggle--collapsed)))
+
+(defun agent-shell-hq-toggle--step (step)
+  "Move the selection by STEP entries, skipping expanded project headers."
   (when agent-shell-hq-toggle--entries
-    (setq agent-shell-hq-toggle--current-idx
-          (mod (1+ agent-shell-hq-toggle--current-idx)
-               (length agent-shell-hq-toggle--entries)))
-    (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
-    (agent-shell-hq-toggle--preview-current)))
+    (let ((len (length agent-shell-hq-toggle--entries))
+          (idx agent-shell-hq-toggle--current-idx))
+      (catch 'found
+        (dotimes (_ len)
+          (setq idx (mod (+ idx step) len))
+          (when (agent-shell-hq-toggle--navigable-p
+                 (nth idx agent-shell-hq-toggle--entries))
+            (throw 'found idx))))
+      (setq agent-shell-hq-toggle--current-idx idx)
+      (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
+      (agent-shell-hq-toggle--preview-current))))
+
+(defun agent-shell-hq-toggle-next ()
+  "Move to the next session entry and preview it."
+  (interactive)
+  (agent-shell-hq-toggle--step 1))
 
 (defun agent-shell-hq-toggle-prev ()
-  "Move to the previous entry and preview it."
+  "Move to the previous session entry and preview it."
   (interactive)
-  (when agent-shell-hq-toggle--entries
-    (setq agent-shell-hq-toggle--current-idx
-          (mod (1- agent-shell-hq-toggle--current-idx)
-               (length agent-shell-hq-toggle--entries)))
-    (agent-shell-hq-toggle--highlight agent-shell-hq-toggle--current-idx)
-    (agent-shell-hq-toggle--preview-current)))
+  (agent-shell-hq-toggle--step -1))
 
 (defun agent-shell-hq-toggle-select ()
   "On a buffer entry: move focus to main window.
@@ -430,8 +444,8 @@ On a project header: toggle collapse."
 (transient-define-prefix agent-shell-hq-toggle-help ()
   "Keybindings for the agent-shell-hq sidebar."
   [["Navigate"
-    ("n" "next entry"          agent-shell-hq-toggle-next)
-    ("p" "previous entry"      agent-shell-hq-toggle-prev)]
+    ("n" "next session"        agent-shell-hq-toggle-next)
+    ("p" "previous session"    agent-shell-hq-toggle-prev)]
    ["Actions"
     ("RET" "select / collapse" agent-shell-hq-toggle-select)
     ("TAB" "collapse / expand" agent-shell-hq-toggle-collapse)
