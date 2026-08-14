@@ -12,7 +12,6 @@
 (require 'agent-shell-hq-peek)
 (require 'agent-shell-hq-label)
 (require 'persp-mode)
-(require 'transient)
 
 ;;;; Customization
 
@@ -35,6 +34,18 @@ pointing to `my/agent-shell-share-project-file' and
 
 (defconst agent-shell-hq-toggle--persp-name "*agent-shell*")
 (defconst agent-shell-hq-toggle--sidebar-name " *agent-shell-hq-sidebar*")
+
+(defconst agent-shell-hq-toggle--hints
+  '(("n/p" . "navigate")
+    ("RET" . "select")
+    ("TAB" . "collapse")
+    ("r"   . "label")
+    ("R"   . "label all")
+    ("K"   . "kill")
+    ("g"   . "refresh")
+    ("s"   . "new shell")
+    ("q"   . "quit"))
+  "Key/description pairs shown in the sidebar's bottom hint footer.")
 
 ;;;; Internal state
 
@@ -76,6 +87,14 @@ pointing to `my/agent-shell-share-project-file' and
   "Face for the selected entry in the toggle sidebar.
 Intentionally dim — just enough to show position without glare.")
 
+(defface agent-shell-hq-toggle-hint-key
+  '((t :inherit font-lock-constant-face))
+  "Face for key names in the sidebar's bottom hint footer.")
+
+(defface agent-shell-hq-toggle-hint-desc
+  '((t :inherit shadow))
+  "Face for descriptions in the sidebar's bottom hint footer.")
+
 ;;;; Keymap
 
 (defvar agent-shell-hq-toggle-map
@@ -94,7 +113,6 @@ Intentionally dim — just enough to show position without glare.")
     (define-key map (kbd "s")             #'agent-shell-hq-toggle-new-shell)
     (define-key map (kbd "q")             #'agent-shell-hq-toggle)
     (define-key map (kbd "C-g")           #'agent-shell-hq-toggle)
-    (define-key map (kbd "?")             #'agent-shell-hq-toggle-help)
     (define-key map (kbd "<mouse-1>")     #'agent-shell-hq-toggle-mouse-select)
     (define-key map (kbd "<double-mouse-1>") #'agent-shell-hq-toggle-mouse-select-double)
     map)
@@ -216,6 +234,22 @@ Otherwise clamp the old index to the new list length."
 
 ;;;; Rendering
 
+(defun agent-shell-hq-toggle--insert-hint-footer ()
+  "Insert the key/hint footer, padded with blank lines so it sits flush
+against the bottom of the sidebar window regardless of session count."
+  (let* ((win        (get-buffer-window (current-buffer)))
+         (used-lines (line-number-at-pos (point)))
+         (hint-lines (length agent-shell-hq-toggle--hints))
+         (avail      (and win (window-body-height win))))
+    (when avail
+      (insert (make-string (max 0 (- avail used-lines hint-lines)) ?\n)))
+    (dolist (hint agent-shell-hq-toggle--hints)
+      (insert " "
+              (propertize (car hint) 'face 'agent-shell-hq-toggle-hint-key)
+              " "
+              (propertize (cdr hint) 'face 'agent-shell-hq-toggle-hint-desc)
+              "\n"))))
+
 (defun agent-shell-hq-toggle--render ()
   "Render the sidebar buffer and rebuild the entries list."
   (let ((groups (agent-shell-hq-peek--grouped-buffers)))
@@ -254,6 +288,7 @@ Otherwise clamp the old index to the new list length."
                            'face 'default
                            'agent-shell-hq-toggle-buffer buf)))))
             (insert "\n")))
+        (agent-shell-hq-toggle--insert-hint-footer)
         (setq agent-shell-hq-toggle--entries
               (nreverse agent-shell-hq-toggle--entries))
         (setq buffer-read-only t)
@@ -438,25 +473,6 @@ On a project header: toggle collapse."
     (when-let ((sidebar-win (get-buffer-window agent-shell-hq-toggle--sidebar-name)))
       (select-window sidebar-win)
       (agent-shell-hq-toggle-refresh))))
-
-;;;; Help transient
-
-(transient-define-prefix agent-shell-hq-toggle-help ()
-  "Keybindings for the agent-shell-hq sidebar."
-  [["Navigate"
-    ("n" "next session"        agent-shell-hq-toggle-next)
-    ("p" "previous session"    agent-shell-hq-toggle-prev)]
-   ["Actions"
-    ("RET" "select / collapse" agent-shell-hq-toggle-select)
-    ("TAB" "collapse / expand" agent-shell-hq-toggle-collapse)
-    ("r"   "label session"     agent-shell-hq-toggle-label-current)
-    ("R"   "label all sessions" agent-shell-hq-toggle-label-all)
-    ("K"   "kill session"      agent-shell-hq-toggle-kill-current)
-    ("g"   "refresh list"      agent-shell-hq-toggle-refresh)
-    ("s"   "new shell"         agent-shell-hq-toggle-new-shell)]
-   ["Quit"
-    ("q"   "quit workspace"    agent-shell-hq-toggle)
-    ("?"   "this help"         agent-shell-hq-toggle-help)]])
 
 ;;;; Workspace setup / teardown
 
