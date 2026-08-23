@@ -12,6 +12,7 @@
 (require 'agent-shell-hq-peek)
 (require 'agent-shell-hq-label)
 (require 'persp-mode)
+(require 'seq)
 
 ;;;; Customization
 
@@ -36,16 +37,16 @@ pointing to `my/agent-shell-share-project-file' and
 (defconst agent-shell-hq-toggle--sidebar-name " *agent-shell-hq-sidebar*")
 
 (defconst agent-shell-hq-toggle--hints
-  '(("n/p" . "navigate")
-    ("RET" . "select")
-    ("TAB" . "collapse")
-    ("r"   . "label")
-    ("R"   . "label all")
-    ("K"   . "kill")
-    ("g"   . "refresh")
-    ("s"   . "new shell")
-    ("q"   . "quit"))
-  "Key/description pairs shown in the sidebar's bottom hint footer.")
+  '(((agent-shell-hq-toggle-next agent-shell-hq-toggle-prev) . "navigate")
+    (agent-shell-hq-toggle-select                            . "select")
+    (agent-shell-hq-toggle-collapse                          . "collapse")
+    (agent-shell-hq-toggle-label-current                     . "label")
+    (agent-shell-hq-toggle-label-all                         . "label all")
+    (agent-shell-hq-toggle-kill-current                      . "kill")
+    (agent-shell-hq-toggle-refresh                           . "refresh")
+    (agent-shell-hq-toggle-new-shell                         . "new shell")
+    (agent-shell-hq-toggle                                   . "quit"))
+  "Command/description pairs shown in the sidebar's bottom hint footer.")
 
 ;;;; Internal state
 
@@ -100,10 +101,10 @@ Intentionally dim — just enough to show position without glare.")
 (defvar agent-shell-hq-toggle-map
   (let ((map (make-sparse-keymap)))
     (suppress-keymap map t)
-    (define-key map (kbd "n")             #'agent-shell-hq-toggle-next)
     (define-key map (kbd "j")             #'agent-shell-hq-toggle-next)
-    (define-key map (kbd "p")             #'agent-shell-hq-toggle-prev)
+    (define-key map (kbd "n")             #'agent-shell-hq-toggle-next)
     (define-key map (kbd "k")             #'agent-shell-hq-toggle-prev)
+    (define-key map (kbd "p")             #'agent-shell-hq-toggle-prev)
     (define-key map (kbd "RET")           #'agent-shell-hq-toggle-select)
     (define-key map (kbd "TAB")           #'agent-shell-hq-toggle-collapse)
     (define-key map (kbd "r")             #'agent-shell-hq-toggle-label-current)
@@ -111,8 +112,8 @@ Intentionally dim — just enough to show position without glare.")
     (define-key map (kbd "K")             #'agent-shell-hq-toggle-kill-current)
     (define-key map (kbd "g")             #'agent-shell-hq-toggle-refresh)
     (define-key map (kbd "s")             #'agent-shell-hq-toggle-new-shell)
-    (define-key map (kbd "q")             #'agent-shell-hq-toggle)
     (define-key map (kbd "C-g")           #'agent-shell-hq-toggle)
+    (define-key map (kbd "q")             #'agent-shell-hq-toggle)
     (define-key map (kbd "<mouse-1>")     #'agent-shell-hq-toggle-mouse-select)
     (define-key map (kbd "<double-mouse-1>") #'agent-shell-hq-toggle-mouse-select-double)
     map)
@@ -234,6 +235,26 @@ Otherwise clamp the old index to the new list length."
 
 ;;;; Rendering
 
+(defun agent-shell-hq-toggle--format-hint-key (cmd-or-cmds)
+  "Return formatted key string for CMD-OR-CMDS in `agent-shell-hq-toggle-map'.
+CMD-OR-CMDS can be a command symbol or a list of command symbols
+which will be formatted separated by slashes (e.g. \"n/p\")."
+  (let ((lookup (lambda (cmd)
+                  (when-let ((keys (where-is-internal cmd agent-shell-hq-toggle-map)))
+                    (when-let ((key (seq-find (lambda (k)
+                                                (and (> (length k) 0)
+                                                     (not (mouse-event-p (aref k 0)))
+                                                     (not (memq (aref k 0)
+                                                                '(menu-bar header-line mode-line tab-line)))))
+                                              keys)))
+                      (key-description key))))))
+    (if (listp cmd-or-cmds)
+        (let ((keys (mapcar lookup cmd-or-cmds)))
+          (if (seq-every-p #'identity keys)
+              (string-join keys "/")
+            (or (seq-find #'identity keys) "-")))
+      (or (funcall lookup cmd-or-cmds) "-"))))
+
 (defun agent-shell-hq-toggle--insert-hint-footer ()
   "Insert the key/hint footer, padded with blank lines so it sits flush
 against the bottom of the sidebar window regardless of session count."
@@ -245,7 +266,8 @@ against the bottom of the sidebar window regardless of session count."
       (insert (make-string (max 0 (- avail used-lines hint-lines)) ?\n)))
     (dolist (hint agent-shell-hq-toggle--hints)
       (insert " "
-              (propertize (car hint) 'face 'agent-shell-hq-toggle-hint-key)
+              (propertize (agent-shell-hq-toggle--format-hint-key (car hint))
+                          'face 'agent-shell-hq-toggle-hint-key)
               " "
               (propertize (cdr hint) 'face 'agent-shell-hq-toggle-hint-desc)
               "\n"))))
