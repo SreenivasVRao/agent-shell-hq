@@ -135,15 +135,33 @@ Uses the existing viewport buffer when one already exists, so its mode
 </svg>"))
   "Inline SVG strings for each buffer state.")
 
-(defun agent-shell-hq-peek--svg-icon (state)
-  "Return the cached SVG image for STATE (`busy', `idle', or `dead')."
-  (unless agent-shell-hq-peek--icon-cache
-    (setq agent-shell-hq-peek--icon-cache
-          (mapcar (lambda (pair)
-                    (cons (car pair)
-                          (create-image (cdr pair) 'svg t :ascent 'center)))
-                  agent-shell-hq-peek--icon-svgs)))
-  (alist-get state agent-shell-hq-peek--icon-cache))
+(defcustom agent-shell-hq-fallback-icons
+  '((idle . ("✓" . success))
+    (busy . ("◔" . warning))
+    (dead . ("✗" . error)))
+  "Fallback Unicode characters for TUI Emacs.
+Each entry is (STATE . (CHAR . FACE)), used when image display is
+unavailable (e.g. terminal Emacs).  Uses `font-lock-face' so the
+color survives outer `face' text properties in the render code."
+  :type '(alist :key-type (choice (const idle) (const busy) (const dead))
+                :value-type (cons string face))
+  :group 'agent-shell-hq-peek)
+
+(defun agent-shell-hq--icon (state)
+  "Return a propertized string displaying the icon for STATE.
+In GUI Emacs with SVG support, this is a space with a `display' SVG
+image property.  Otherwise, this is a Unicode character with a face."
+  (if (and (display-graphic-p) (image-type-available-p 'svg))
+      (progn
+        (unless agent-shell-hq-peek--icon-cache
+          (setq agent-shell-hq-peek--icon-cache
+                (mapcar (lambda (pair)
+                          (cons (car pair)
+                                (create-image (cdr pair) 'svg t :ascent 'center)))
+                        agent-shell-hq-peek--icon-svgs)))
+        (propertize " " 'display (alist-get state agent-shell-hq-peek--icon-cache)))
+    (let ((fallback (alist-get state agent-shell-hq-fallback-icons)))
+      (propertize (car fallback) 'face (cdr fallback)))))
 
 (defun agent-shell-hq-peek--buffer-state (buf)
   "Return `busy', `idle', or `dead' for BUF."
@@ -191,19 +209,18 @@ Uses the existing viewport buffer when one already exists, so its mode
           (insert (propertize (concat "    " pname "\n")
                               'face 'agent-shell-hq-peek-project
                               'agent-shell-hq-peek-header t))
-          (dolist (buf bufs)
-            (let* ((state (agent-shell-hq-peek--buffer-state buf))
-                   (icon  (agent-shell-hq-peek--svg-icon state))
-                   (bname (buffer-name buf)))
-              (push (list :buffer buf) agent-shell-hq-peek--entries)
-              (insert (propertize
-                       (concat "      "
-                               (propertize " " 'display icon)
-                               " "
-                               bname
-                               "\n")
-                       'face 'default
-                       'agent-shell-hq-peek-buffer buf))))
+           (dolist (buf bufs)
+             (let* ((state (agent-shell-hq-peek--buffer-state buf))
+                    (icon  (agent-shell-hq--icon state))
+                    (bname (buffer-name buf)))
+                (push (list :buffer buf) agent-shell-hq-peek--entries)
+                (insert (propertize
+                         (concat "      "
+                                 icon
+                                 " "
+                                 bname
+                                 "\n")
+                        'agent-shell-hq-peek-buffer buf))))
           (insert "\n")))
       (insert (propertize "    n/p navigate   RET select   q quit\n" 'face 'shadow))
       (insert "\n")
@@ -213,28 +230,28 @@ Uses the existing viewport buffer when one already exists, so its mode
 
 ;;;; Highlight management
 
+(defvar agent-shell-hq-peek--highlight-overlay nil
+  "Overlay used to highlight the selected line in the peek buffer.")
+
 (defun agent-shell-hq-peek--highlight-line (idx)
   "Highlight the entry at IDX, clearing all others."
   (with-current-buffer (get-buffer-create agent-shell-hq-peek--buffer-name)
     (let ((inhibit-read-only t))
-      (save-excursion
-        (goto-char (point-min))
-        (while (not (eobp))
-          (when (get-text-property (point) 'agent-shell-hq-peek-buffer)
-            (put-text-property (point)
-                               (min (1+ (line-end-position)) (point-max))
-                               'face 'default))
-          (forward-line 1)))
-      (when-let* ((entry (nth idx agent-shell-hq-peek--entries))
-                  (buf   (plist-get entry :buffer))
-                  (pos   (text-property-any (point-min) (point-max)
-                                            'agent-shell-hq-peek-buffer buf)))
-        (put-text-property pos
-                           (min (1+ (save-excursion
-                                      (goto-char pos)
-                                      (line-end-position)))
-                                (point-max))
-                           'face 'highlight)))))
+      (unless (overlayp agent-shell-hq-peek--highlight-overlay)
+        (setq agent-shell-hq-peek--highlight-overlay
+              (make-overlay (point-min) (point-min))))
+      (let ((ov agent-shell-hq-peek--highlight-overlay))
+        (move-overlay ov (point-min) (point-min))
+        (when-let* ((entry (nth idx agent-shell-hq-peek--entries))
+                    (buf   (plist-get entry :buffer))
+                    (pos   (text-property-any (point-min) (point-max)
+                                              'agent-shell-hq-peek-buffer buf)))
+          (move-overlay ov pos
+                        (min (1+ (save-excursion
+                                   (goto-char pos)
+                                   (line-end-position)))
+                             (point-max)))
+        (overlay-put ov 'face 'highlight))))))
 
 ;;;; Posframe position handler
 

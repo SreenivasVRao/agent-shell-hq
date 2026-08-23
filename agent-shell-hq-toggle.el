@@ -274,19 +274,18 @@ against the bottom of the sidebar window regardless of session count."
                      'agent-shell-hq-toggle-root root))
             (unless collapsed
               (dolist (buf bufs)
-                (let* ((state (agent-shell-hq-peek--buffer-state buf))
-                       (icon  (agent-shell-hq-peek--svg-icon state))
-                       (bname (buffer-name buf)))
-                  (push (list :type 'buffer :buffer buf :root root)
-                        agent-shell-hq-toggle--entries)
-                  (insert (propertize
-                           (concat "    "
-                                   (propertize " " 'display icon)
-                                   " "
-                                   bname
-                                   "\n")
-                           'face 'default
-                           'agent-shell-hq-toggle-buffer buf)))))
+                 (let* ((state (agent-shell-hq-peek--buffer-state buf))
+                        (icon  (agent-shell-hq--icon state))
+                        (bname (buffer-name buf)))
+                   (push (list :type 'buffer :buffer buf :root root)
+                         agent-shell-hq-toggle--entries)
+                    (insert (propertize
+                             (concat "    "
+                                     icon
+                                     " "
+                                     bname
+                                     "\n")
+                             'agent-shell-hq-toggle-buffer buf)))))
             (insert "\n")))
         (agent-shell-hq-toggle--insert-hint-footer)
         (setq agent-shell-hq-toggle--entries
@@ -299,39 +298,34 @@ against the bottom of the sidebar window regardless of session count."
 
 ;;;; Highlight + point sync
 
+(defvar agent-shell-hq-toggle--highlight-overlay nil
+  "Overlay used to highlight the selected entry in the sidebar.")
+
 (defun agent-shell-hq-toggle--highlight (idx)
   "Highlight entry at IDX and sync point to that line in the sidebar window."
   (with-current-buffer (get-buffer-create agent-shell-hq-toggle--sidebar-name)
     (let ((inhibit-read-only t))
-      ;; Clear all entry highlights
-      (save-excursion
-        (goto-char (point-min))
-        (while (not (eobp))
-          (cond
-           ((get-text-property (point) 'agent-shell-hq-toggle-buffer)
-            (put-text-property (point) (min (1+ (line-end-position)) (point-max))
-                               'face 'default))
-           ((get-text-property (point) 'agent-shell-hq-toggle-root)
-            (put-text-property (point) (min (1+ (line-end-position)) (point-max))
-                               'face 'agent-shell-hq-toggle-project)))
-          (forward-line 1)))
-      ;; Highlight and move to the selected entry
-      (when-let* ((entry (nth idx agent-shell-hq-toggle--entries))
-                  (type  (plist-get entry :type))
-                  (pos   (if (eq type 'project)
+      (unless (overlayp agent-shell-hq-toggle--highlight-overlay)
+        (setq agent-shell-hq-toggle--highlight-overlay
+              (make-overlay (point-min) (point-min))))
+      (let ((ov agent-shell-hq-toggle--highlight-overlay))
+        (move-overlay ov (point-min) (point-min))
+        (when-let* ((entry (nth idx agent-shell-hq-toggle--entries))
+                    (type  (plist-get entry :type))
+                    (pos   (if (eq type 'project)
+                               (text-property-any (point-min) (point-max)
+                                                  'agent-shell-hq-toggle-root
+                                                  (plist-get entry :root))
                              (text-property-any (point-min) (point-max)
-                                                'agent-shell-hq-toggle-root
-                                                (plist-get entry :root))
-                           (text-property-any (point-min) (point-max)
-                                              'agent-shell-hq-toggle-buffer
-                                              (plist-get entry :buffer)))))
-        (put-text-property pos
-                           (min (1+ (save-excursion (goto-char pos) (line-end-position)))
-                                (point-max))
-                           'face 'agent-shell-hq-toggle-selection)
-        (goto-char pos)
-        (when-let ((win (get-buffer-window (current-buffer))))
-          (set-window-point win pos))))))
+                                                'agent-shell-hq-toggle-buffer
+                                                (plist-get entry :buffer)))))
+          (move-overlay ov pos
+                        (min (1+ (save-excursion (goto-char pos) (line-end-position)))
+                             (point-max)))
+          (overlay-put ov 'face 'agent-shell-hq-toggle-selection)
+          (goto-char pos)
+          (when-let ((win (get-buffer-window (current-buffer))))
+            (set-window-point win pos)))))))
 
 ;;;; Preview
 
