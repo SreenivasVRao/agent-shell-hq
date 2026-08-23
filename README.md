@@ -1,5 +1,7 @@
 # agent-shell-hq
 
+https://github.com/user-attachments/assets/17d5ec11-510b-42bf-b2f0-626d5f171a47
+
 This project is actively maintained! I use it everyday - contributions welcome! :)
 An add-on to [agent-shell](https://github.com/xenodium/agent-shell) that provides heads-up display and peek features for managing multiple agent-shell sessions.
 
