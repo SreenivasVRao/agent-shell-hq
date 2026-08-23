@@ -541,6 +541,8 @@ Sidebar keys:
   s      new agent-shell in current project
   q      quit (return to previous perspective)"
   (interactive)
+  (unless (bound-and-true-p persp-mode)
+    (persp-mode 1))
   (if (string= (safe-persp-name (get-current-persp))
                agent-shell-hq-toggle--persp-name)
       (let ((prev agent-shell-hq-toggle--prev-persp))
