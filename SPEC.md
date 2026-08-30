@@ -191,7 +191,7 @@ No timer. Icons are loaded lazily on first use and cached. State is checked per-
 
 ### 3.3 Icon cache
 
-Icons are cached as `image` objects keyed by `state` — three entries total (`idle`, `busy`, `dead`). Cache is populated lazily on first call to `agent-shell-hq-peek--svg-icon`.
+Icons are cached as `image` objects keyed by `state` — four entries total (`idle`, `busy`, `blocked`, `dead`). Cache is populated lazily on first call to `agent-shell-hq-peek--svg-icon`.
 
 Colors are baked into the SVG files on disk (not derived dynamically from theme faces).
 
@@ -235,6 +235,6 @@ agent-shell-hq/
 ├── agent-shell-hq-peek.el    ; posframe switcher, shared buffer grouping
 ├── agent-shell-hq-toggle.el  ; sidebar workspace
 ├── agent-shell-hq-label.el   ; async session labelling via Anthropic REST API
-├── icons/                    ; idle.svg, busy.svg, dead.svg
+├── icons/                    ; idle.svg, busy.svg, blocked.svg, dead.svg
 └── SPEC.md                   ; this file
 ```

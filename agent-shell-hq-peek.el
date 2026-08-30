@@ -128,6 +128,10 @@ Uses the existing viewport buffer when one already exists, so its mode
     (busy . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
   <polygon points=\"10,2 18.5,17.5 1.5,17.5\" fill=\"#C9922A\"/>
 </svg>")
+    (blocked . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
+  <polygon points=\"18.5,6.5 13.5,1.5 6.5,1.5 1.5,6.5 1.5,13.5 6.5,18.5 13.5,18.5 18.5,13.5\" fill=\"#D32F2F\"/>
+  <polygon points=\"16.5,7.0 13.0,3.5 7.0,3.5 3.5,7.0 3.5,13.0 7.0,16.5 13.0,16.5 16.5,13.0\" fill=\"none\" stroke=\"white\" stroke-width=\"1.2\"/>
+</svg>")
     (dead . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
   <circle cx=\"10\" cy=\"10\" r=\"8.5\" fill=\"#C0392B\"/>
   <line x1=\"6.5\" y1=\"6.5\" x2=\"13.5\" y2=\"13.5\" stroke=\"white\" stroke-width=\"2.5\" stroke-linecap=\"round\"/>
@@ -135,15 +139,26 @@ Uses the existing viewport buffer when one already exists, so its mode
 </svg>"))
   "Inline SVG strings for each buffer state.")
 
+(defun agent-shell-hq-peek--svg-icon (state)
+  "Return the cached SVG image for STATE (`busy', `blocked', `idle', or `dead')."
+  (unless agent-shell-hq-peek--icon-cache
+    (setq agent-shell-hq-peek--icon-cache
+          (mapcar (lambda (pair)
+                    (cons (car pair)
+                          (create-image (cdr pair) 'svg t :ascent 'center)))
+                  agent-shell-hq-peek--icon-svgs)))
+  (alist-get state agent-shell-hq-peek--icon-cache))
+
 (defcustom agent-shell-hq-fallback-icons
   '((idle . ("✓" . success))
     (busy . ("◔" . warning))
+    (blocked . ("⯄" . error))
     (dead . ("✗" . error)))
   "Fallback Unicode characters for TUI Emacs.
 Each entry is (STATE . (CHAR . FACE)), used when image display is
 unavailable (e.g. terminal Emacs).  Uses `font-lock-face' so the
 color survives outer `face' text properties in the render code."
-  :type '(alist :key-type (choice (const idle) (const busy) (const dead))
+  :type '(alist :key-type (choice (const idle) (const busy) (const blocked) (const dead))
                 :value-type (cons string face))
   :group 'agent-shell-hq-peek)
 
@@ -152,22 +167,23 @@ color survives outer `face' text properties in the render code."
 In GUI Emacs with SVG support, this is a space with a `display' SVG
 image property.  Otherwise, this is a Unicode character with a face."
   (if (and (display-graphic-p) (image-type-available-p 'svg))
-      (progn
-        (unless agent-shell-hq-peek--icon-cache
-          (setq agent-shell-hq-peek--icon-cache
-                (mapcar (lambda (pair)
-                          (cons (car pair)
-                                (create-image (cdr pair) 'svg t :ascent 'center)))
-                        agent-shell-hq-peek--icon-svgs)))
-        (propertize " " 'display (alist-get state agent-shell-hq-peek--icon-cache)))
+      (propertize " " 'display (agent-shell-hq-peek--svg-icon state))
     (let ((fallback (alist-get state agent-shell-hq-fallback-icons)))
-      (propertize (car fallback) 'face (cdr fallback)))))
+      (propertize (car fallback) 'face (cdr fallback) 'font-lock-face (cdr fallback)))))
 
 (defun agent-shell-hq-peek--buffer-state (buf)
-  "Return `busy', `idle', or `dead' for BUF."
+  "Return `busy', `blocked', `idle', or `dead' for BUF."
   (if (buffer-live-p buf)
       (with-current-buffer buf
-        (if (shell-maker-busy) 'busy 'idle))
+        (cond
+         ((and (fboundp 'agent-shell-status)
+               (eq (agent-shell-status :shell-buffer buf) 'blocked))
+          'blocked)
+         ((and (fboundp 'agent-shell--permission-pending-p)
+               (agent-shell--permission-pending-p :shell-buffer buf))
+          'blocked)
+         ((shell-maker-busy) 'busy)
+         (t 'idle)))
     'dead))
 
 ;;;; Buffer grouping
