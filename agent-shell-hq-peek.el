@@ -168,7 +168,8 @@ In GUI Emacs with SVG support, this is a space with a `display' SVG
 image property.  Otherwise, this is a Unicode character with a face."
   (if (and (display-graphic-p) (image-type-available-p 'svg))
       (propertize " " 'display (agent-shell-hq-peek--svg-icon state))
-    (let ((fallback (alist-get state agent-shell-hq-fallback-icons)))
+    (let ((fallback (or (alist-get state agent-shell-hq-fallback-icons)
+                         '("?" . default))))
       (propertize (car fallback) 'face (cdr fallback) 'font-lock-face (cdr fallback)))))
 
 (defun agent-shell-hq-peek--buffer-state (buf)
@@ -177,10 +178,10 @@ image property.  Otherwise, this is a Unicode character with a face."
       (with-current-buffer buf
         (cond
          ((and (fboundp 'agent-shell-status)
-               (eq (agent-shell-status :shell-buffer buf) 'blocked))
+               (eq (ignore-errors (agent-shell-status :shell-buffer buf)) 'blocked))
           'blocked)
          ((and (fboundp 'agent-shell--permission-pending-p)
-               (agent-shell--permission-pending-p :shell-buffer buf))
+               (ignore-errors (agent-shell--permission-pending-p :shell-buffer buf)))
           'blocked)
          ((shell-maker-busy) 'busy)
          (t 'idle)))

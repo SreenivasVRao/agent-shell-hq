@@ -194,7 +194,7 @@ and other persp-mode-aware pickers only show agent-shell sessions."
   "Return alist of (buffer . state), sorted by buffer name for stable comparison.
 Sorting by name rather than using the raw MRU order from `agent-shell-buffers'
 prevents false positives in `agent-shell-hq-toggle--maybe-refresh': buffer
-accesses change MRU order but not actual busy/idle/dead state."
+accesses change MRU order but not actual busy/idle/blocked/dead state."
   (sort (mapcar (lambda (buf)
                   (cons buf (agent-shell-hq-peek--buffer-state buf)))
                 (agent-shell-buffers))
