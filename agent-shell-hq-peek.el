@@ -323,7 +323,8 @@ image property.  Otherwise, this is a Unicode character with a face."
             agent-shell-hq-peek--current-idx 0)
       (when (and (window-live-p win) (buffer-live-p disp-buf))
         (select-window win)
-        (switch-to-buffer disp-buf)))))
+        (switch-to-buffer disp-buf)
+        (select-frame-set-input-focus (window-frame win))))))
 
 (defun agent-shell-hq-peek-quit ()
   "Dismiss the peek posframe and restore the original buffer."
@@ -339,6 +340,7 @@ image property.  Otherwise, this is a Unicode character with a face."
           agent-shell-hq-peek--origin-buffer nil)
     (when (window-live-p win)
       (select-window win)
+      (select-frame-set-input-focus (window-frame win))
       (when (and (buffer-live-p orig-buf)
                  (not (eq (window-buffer win) orig-buf)))
         (set-window-buffer win orig-buf)))))
