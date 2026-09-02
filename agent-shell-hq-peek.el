@@ -126,11 +126,15 @@ Uses the existing viewport buffer when one already exists, so its mode
             stroke-linecap=\"round\" stroke-linejoin=\"round\"/>
 </svg>")
     (busy . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
-  <polygon points=\"10,2 18.5,17.5 1.5,17.5\" fill=\"#C9922A\"/>
+  <circle cx=\"10\" cy=\"10\" r=\"8.5\" fill=\"#C9922A\"/>
+  <circle cx=\"10\" cy=\"10\" r=\"6\" fill=\"none\" stroke=\"white\" stroke-width=\"1.2\"/>
+  <line x1=\"10\" y1=\"10\" x2=\"10\" y2=\"5.5\" stroke=\"white\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>
+  <line x1=\"10\" y1=\"10\" x2=\"13.5\" y2=\"10\" stroke=\"white\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>
 </svg>")
     (blocked . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
-  <polygon points=\"18.5,6.5 13.5,1.5 6.5,1.5 1.5,6.5 1.5,13.5 6.5,18.5 13.5,18.5 18.5,13.5\" fill=\"#D32F2F\"/>
-  <polygon points=\"16.5,7.0 13.0,3.5 7.0,3.5 3.5,7.0 3.5,13.0 7.0,16.5 13.0,16.5 16.5,13.0\" fill=\"none\" stroke=\"white\" stroke-width=\"1.2\"/>
+  <polygon points=\"10,2 18.5,17.5 1.5,17.5\" fill=\"#C0392B\"/>
+  <line x1=\"10\" y1=\"7\" x2=\"10\" y2=\"12.5\" stroke=\"white\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>
+  <circle cx=\"10\" cy=\"14.5\" r=\"1\" fill=\"white\"/>
 </svg>")
     (dead . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\">
   <circle cx=\"10\" cy=\"10\" r=\"8.5\" fill=\"#C0392B\"/>
@@ -152,7 +156,7 @@ Uses the existing viewport buffer when one already exists, so its mode
 (defcustom agent-shell-hq-fallback-icons
   '((idle . ("✓" . success))
     (busy . ("◔" . warning))
-    (blocked . ("⯄" . error))
+    (blocked . ("⚠" . error))
     (dead . ("✗" . error)))
   "Fallback Unicode characters for TUI Emacs.
 Each entry is (STATE . (CHAR . FACE)), used when image display is
