@@ -9,6 +9,7 @@
 
 (require 'agent-shell)
 (require 'agent-shell-viewport)
+(require 'cl-lib)
 (require 'posframe)
 
 ;;;; Customization
@@ -221,6 +222,22 @@ image property.  Otherwise, this is a Unicode character with a face."
                           (nreverse order))))
       (sort groups (lambda (a b) (string< (cadr a) (cadr b)))))))
 
+(defun agent-shell-hq-peek--origin-root (buf)
+  "Return the project root for BUF, or nil if it cannot be determined."
+  (when (buffer-live-p buf)
+    (with-current-buffer buf
+      (ignore-errors (agent-shell-cwd)))))
+
+(defun agent-shell-hq-peek--initial-idx (groups origin-root)
+  "Return the entry index of the first buffer in GROUPS matching ORIGIN-ROOT.
+Returns 0 when ORIGIN-ROOT is nil or matches no group."
+  (or (and origin-root
+           (cl-loop for (root _pname buffers) in groups
+                    sum (length buffers) into idx
+                    when (and root (file-equal-p root origin-root))
+                    return (- idx (length buffers))))
+      0))
+
 ;;;; Rendering
 
 (defun agent-shell-hq-peek--render (groups)
@@ -373,14 +390,17 @@ image property.  Otherwise, this is a Unicode character with a face."
 n/p navigates, RET selects, g/q/C-g quits."
   (interactive)
   (let* ((origin-win   (selected-window))
-         (groups       (agent-shell-hq-peek--grouped-buffers)))
+         (origin-buf   (window-buffer origin-win))
+         (groups       (agent-shell-hq-peek--grouped-buffers))
+         (initial-idx  (agent-shell-hq-peek--initial-idx
+                        groups (agent-shell-hq-peek--origin-root origin-buf))))
     (unless groups
       (user-error "No agent-shell buffers found"))
     (setq agent-shell-hq-peek--origin-window origin-win
-          agent-shell-hq-peek--origin-buffer  (window-buffer origin-win)
-          agent-shell-hq-peek--current-idx   0)
+          agent-shell-hq-peek--origin-buffer  origin-buf
+          agent-shell-hq-peek--current-idx   initial-idx)
     (agent-shell-hq-peek--render groups)
-    (agent-shell-hq-peek--highlight-line 0)
+    (agent-shell-hq-peek--highlight-line initial-idx)
     (with-current-buffer agent-shell-hq-peek--buffer-name
       (use-local-map agent-shell-hq-peek-map))
     (setq agent-shell-hq-peek--saved-terminal-map overriding-terminal-local-map

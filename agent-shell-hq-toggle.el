@@ -214,6 +214,18 @@ accesses change MRU order but not actual busy/idle/blocked/dead state."
 
 ;;;; Cursor helpers
 
+(defun agent-shell-hq-toggle--index-for-root (root)
+  "Return the index of the first buffer entry under ROOT, or 0.
+Searches the already-rendered `agent-shell-hq-toggle--entries', so it
+accounts for the project-header entries interleaved with buffers."
+  (or (and root
+           (cl-position-if (lambda (e)
+                              (and (eq (plist-get e :type) 'buffer)
+                                   (plist-get e :root)
+                                   (file-equal-p (plist-get e :root) root)))
+                            agent-shell-hq-toggle--entries))
+      0))
+
 (defun agent-shell-hq-toggle--current-buffer ()
   "Return the buffer object for the currently highlighted entry, or nil."
   (when-let ((entry (nth agent-shell-hq-toggle--current-idx
@@ -492,8 +504,10 @@ On a project header: toggle collapse."
 
 ;;;; Workspace setup / teardown
 
-(defun agent-shell-hq-toggle--setup ()
-  "Build the sidebar + main window layout."
+(defun agent-shell-hq-toggle--setup (&optional origin-buf)
+  "Build the sidebar + main window layout.
+When ORIGIN-BUF belongs to a project with existing sessions, the
+sidebar's initial selection lands on that project's first session."
   (when (window-parameter (selected-window) 'window-side)
     (let ((non-side (seq-find (lambda (w) (not (window-parameter w 'window-side)))
                               (window-list))))
@@ -508,11 +522,13 @@ On a project header: toggle collapse."
     (setq agent-shell-hq-toggle--main-window
           (car (seq-filter (lambda (w) (not (eq w sidebar-win)))
                            (window-list)))))
-  (setq agent-shell-hq-toggle--current-idx 0
-        agent-shell-hq-toggle--collapsed    nil)
+  (setq agent-shell-hq-toggle--collapsed nil)
   (agent-shell-hq-toggle--render)
   (agent-shell-hq-toggle--populate-perspective)
-  (agent-shell-hq-toggle--highlight 0)
+  (let ((initial-idx (agent-shell-hq-toggle--index-for-root
+                       (agent-shell-hq-peek--origin-root origin-buf))))
+    (setq agent-shell-hq-toggle--current-idx initial-idx)
+    (agent-shell-hq-toggle--highlight initial-idx))
   (agent-shell-hq-toggle--preview-current)
   (select-window (get-buffer-window agent-shell-hq-toggle--sidebar-name))
   (setq agent-shell-hq-toggle--refresh-timer
@@ -570,10 +586,11 @@ Sidebar keys:
       (let ((prev agent-shell-hq-toggle--prev-persp))
         (when prev (persp-switch prev))
         (agent-shell-hq-toggle--teardown))
-    (setq agent-shell-hq-toggle--prev-persp
-          (safe-persp-name (get-current-persp)))
-    (persp-switch agent-shell-hq-toggle--persp-name)
-    (agent-shell-hq-toggle--setup)))
+    (let ((origin-buf (current-buffer)))
+      (setq agent-shell-hq-toggle--prev-persp
+            (safe-persp-name (get-current-persp)))
+      (persp-switch agent-shell-hq-toggle--persp-name)
+      (agent-shell-hq-toggle--setup origin-buf))))
 
 (provide 'agent-shell-hq-toggle)
 ;;; agent-shell-hq-toggle.el ends here
