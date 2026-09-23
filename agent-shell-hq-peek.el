@@ -370,8 +370,30 @@ image property.  Otherwise, this is a Unicode character with a face."
 (defun agent-shell-hq-peek ()
   "Show a posframe listing all agent-shell buffers grouped by project.
 
+Calling this while already inside the posframe (e.g. invoking the
+keybinding a second time from inside it) quits the posframe instead of
+opening a new one.  Calling it from a different frame (e.g. another
+emacsclient) reparents the posframe there instead of opening a second
+one.
+
 n/p navigates, RET selects, g/q/C-g quits."
   (interactive)
+  (if (agent-shell-hq-peek--showing-here-p)
+      (agent-shell-hq-peek-quit)
+    (agent-shell-hq-peek--open)))
+
+(defun agent-shell-hq-peek--showing-here-p ()
+  "Return non-nil when the peek posframe is live and is the selected frame.
+This is only true when point is already inside the posframe (e.g. the
+keybinding was pressed a second time from within it), as opposed to
+merely being visible on some other frame."
+  (when-let* ((buf (get-buffer agent-shell-hq-peek--buffer-name))
+              (pf  (buffer-local-value 'posframe--frame buf)))
+    (and (frame-live-p pf)
+         (eq pf (selected-frame)))))
+
+(defun agent-shell-hq-peek--open ()
+  "Build and show the peek posframe."
   (let* ((origin-win   (selected-window))
          (groups       (agent-shell-hq-peek--grouped-buffers)))
     (unless groups
