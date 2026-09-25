@@ -534,7 +534,6 @@ On a project header: toggle collapse."
 
 ;;;; Entry point
 
-;;;###autoload
 (defun agent-shell-hq-toggle-jump-to-sidebar ()
   "Jump to the sidebar buffer if it exists, otherwise open the toggle workspace."
   (interactive)
@@ -542,9 +541,8 @@ On a project header: toggle collapse."
       (if (get-buffer-window agent-shell-hq-toggle--sidebar-name)
           (select-window (get-buffer-window agent-shell-hq-toggle--sidebar-name))
         (agent-shell-hq-toggle))
-    (agent-shell-hq-toggle)))
+     (agent-shell-hq-toggle)))
 
-;;;###autoload
 (defun agent-shell-hq-toggle ()
   "Toggle the agent-shell HQ workspace.
 

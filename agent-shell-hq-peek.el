@@ -366,7 +366,6 @@ image property.  Otherwise, this is a Unicode character with a face."
 
 ;;;; Entry point
 
-;;;###autoload
 (defun agent-shell-hq-peek ()
   "Show a posframe listing all agent-shell buffers grouped by project.
 
