@@ -41,7 +41,6 @@ lowercase, no punctuation:\n\n%s"
 
 ;;;; Public API
 
-;;;###autoload
 (defun agent-shell-hq-label (&optional shell-buf)
   "Auto-title SHELL-BUF by passing its content to `agent-shell-hq-label-command'.
 When called interactively, resolves the shell buffer from any agent-shell context."

@@ -383,7 +383,6 @@ Returns 0 when ORIGIN-ROOT is nil or matches no group."
 
 ;;;; Entry point
 
-;;;###autoload
 (defun agent-shell-hq-peek ()
   "Show a posframe listing all agent-shell buffers grouped by project.
 
